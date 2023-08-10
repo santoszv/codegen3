@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+@file:Suppress("DuplicatedCode")
+
 package mx.com.inftel.codegen.plugin
 
 import mx.com.inftel.codegen.model.CodegenAttribute
@@ -21,7 +23,9 @@ import mx.com.inftel.codegen.model.CodegenConstraint
 import mx.com.inftel.codegen.model.CodegenEntity
 import mx.com.inftel.codegen.model.CodegenType
 import org.gradle.api.DefaultTask
+import org.gradle.api.GradleException
 import org.gradle.api.NamedDomainObjectContainer
+import org.gradle.api.UnknownDomainObjectException
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.tasks.Internal
@@ -64,15 +68,17 @@ abstract class CodegenTask : DefaultTask() {
 
     private fun generateMetamodel(entity: CodegenEntity) {
         val packageName = entity.packageName.getOrElse("")
+        val packageDir = packageName.replace('.', '/')
+        val outputFilename = "${capitalized(entity.name)}Entity_.java"
         //
         val importStatements = buildSet {
             add("import jakarta.persistence.metamodel.*;")
             addImportsJava(entity)
         }
         //
-        val outputDirectory = outputDirectory.dir(packageName.replace('.', '/')).get()
-        val outputFile = outputDirectory.file("${capitalized(entity.name)}Entity_.java")
-        outputDirectory.asFile.toPath().createDirectories()
+        val outputDirectory = outputDirectory.dir(packageDir).get()
+        val outputFile = outputDirectory.file(outputFilename)
+        outputDirectory.asFile.mkdirs()
         outputFile.asFile.bufferedWriter().use { writer ->
             if (packageName.isNotBlank()) {
                 writer.appendLine("package ${packageName};")
@@ -88,7 +94,7 @@ abstract class CodegenTask : DefaultTask() {
             writer.appendLine("public class ${capitalized(entity.name)}Entity_ {")
             writer.appendLine()
             for (attribute in entity.attributes) {
-                when (val type = attribute.columnType.get()) {
+                when (val type = attribute.columnType.orNull ?: throw GradleException("'columnType' of attribute '${attribute.name}' in entity '${entity.name}' is not declared")) {
                     is CodegenType.Id.Integer -> writer.appendLine("    public static volatile SingularAttribute<${capitalized(entity.name)}Entity, Integer> ${decapitalized(attribute.name)};")
                     is CodegenType.Id.Long -> writer.appendLine("    public static volatile SingularAttribute<${capitalized(entity.name)}Entity,Long> ${decapitalized(attribute.name)};")
                     is CodegenType.Id.UUID -> writer.appendLine("    public static volatile SingularAttribute<${capitalized(entity.name)}Entity, UUID> ${decapitalized(attribute.name)};")
@@ -105,7 +111,11 @@ abstract class CodegenTask : DefaultTask() {
                     CodegenType.Basic.ZonedDateTime -> writer.appendLine("    public static volatile SingularAttribute<${capitalized(entity.name)}Entity, ZonedDateTime> ${decapitalized(attribute.name)};")
 
                     is CodegenType.OwningSide.ManyToOne -> {
-                        val targetEntity = entities.getByName(type.target)
+                        val targetEntity = try {
+                            entities.getByName(type.target)
+                        } catch (e: UnknownDomainObjectException) {
+                            throw GradleException("'target' of attribute '${attribute.name}' in entity '${entity.name}' is a unknown entity")
+                        }
                         writer.appendLine("    public static volatile SingularAttribute<${capitalized(entity.name)}Entity, ${capitalized(targetEntity.name)}Entity> ${decapitalized(attribute.name)};")
                     }
                 }
@@ -117,14 +127,16 @@ abstract class CodegenTask : DefaultTask() {
 
     private fun generateEntity(entity: CodegenEntity) {
         val packageName = entity.packageName.getOrElse("")
+        val packageDir = packageName.replace('.', '/')
+        val outputFilename = "${capitalized(entity.name)}Entity.kt"
         //
         val importStatements = buildSet {
             add("import jakarta.persistence.*")
             addImportsKotlin(entity)
         }
         //
-        val outputDirectory = outputDirectory.dir(packageName.replace('.', '/')).get()
-        val outputFile = outputDirectory.file("${capitalized(entity.name)}Entity.kt")
+        val outputDirectory = outputDirectory.dir(packageDir).get()
+        val outputFile = outputDirectory.file(outputFilename)
         outputDirectory.asFile.toPath().createDirectories()
         outputFile.asFile.bufferedWriter().use { writer ->
             if (packageName.isNotBlank()) {
@@ -142,13 +154,13 @@ abstract class CodegenTask : DefaultTask() {
             writer.appendLine("open class ${capitalized(entity.name)}Entity {")
             writer.appendLine()
             for (attribute in entity.attributes) {
-                when (val type = attribute.columnType.get()) {
+                when (val type = attribute.columnType.orNull ?: throw GradleException("'columnType' of attribute '${attribute.name}' in entity '${entity.name}' is not declared")) {
                     is CodegenType.Id.Integer -> {
                         writer.appendLine("    @get:Id")
                         if (type.autoGenerated) {
                             writer.appendLine("    @get:GeneratedValue(strategy = GenerationType.IDENTITY)")
                         }
-                        generateColumnAnn(writer, attribute)
+                        generateColumnAnn(writer, entity, attribute)
                         writer.appendLine("    open var ${decapitalized(attribute.name)}: Int? = null")
                     }
 
@@ -157,7 +169,7 @@ abstract class CodegenTask : DefaultTask() {
                         if (type.autoGenerated) {
                             writer.appendLine("    @get:GeneratedValue(strategy = GenerationType.IDENTITY)")
                         }
-                        generateColumnAnn(writer, attribute)
+                        generateColumnAnn(writer, entity, attribute)
                         writer.appendLine("    open var ${decapitalized(attribute.name)}: Long? = null")
                     }
 
@@ -166,70 +178,74 @@ abstract class CodegenTask : DefaultTask() {
                         if (type.autoGenerated) {
                             writer.appendLine("    @get:GeneratedValue(strategy = GenerationType.UUID)")
                         }
-                        generateColumnAnn(writer, attribute)
+                        generateColumnAnn(writer, entity, attribute)
                         writer.appendLine("    open var ${decapitalized(attribute.name)}: UUID? = null")
                     }
 
                     CodegenType.Version.Integer -> {
                         writer.appendLine("    @get:Version")
-                        generateColumnAnn(writer, attribute)
+                        generateColumnAnn(writer, entity, attribute)
                         writer.appendLine("    open var ${decapitalized(attribute.name)}: Int? = null")
                     }
 
                     CodegenType.Version.Long -> {
                         writer.appendLine("    @get:Version")
-                        generateColumnAnn(writer, attribute)
+                        generateColumnAnn(writer, entity, attribute)
                         writer.appendLine("    open var ${decapitalized(attribute.name)}: Long? = null")
                     }
 
                     CodegenType.Basic.Integer -> {
-                        generateColumnAnn(writer, attribute)
+                        generateColumnAnn(writer, entity, attribute)
                         writer.appendLine("    open var ${decapitalized(attribute.name)}: Int? = null")
                     }
 
                     CodegenType.Basic.Long -> {
-                        generateColumnAnn(writer, attribute)
+                        generateColumnAnn(writer, entity, attribute)
                         writer.appendLine("    open var ${decapitalized(attribute.name)}: Long? = null")
                     }
 
                     CodegenType.Basic.Boolean -> {
-                        generateColumnAnn(writer, attribute)
+                        generateColumnAnn(writer, entity, attribute)
                         writer.appendLine("    open var ${decapitalized(attribute.name)}: Boolean? = null")
                     }
 
                     is CodegenType.Basic.String -> {
-                        generateColumnAnn(writer, attribute)
+                        generateColumnAnn(writer, entity, attribute)
                         writer.appendLine("    open var ${decapitalized(attribute.name)}: String? = null")
                     }
 
                     is CodegenType.Basic.BigDecimal -> {
-                        generateColumnAnn(writer, attribute)
+                        generateColumnAnn(writer, entity, attribute)
                         writer.appendLine("    open var ${decapitalized(attribute.name)}: BigDecimal? = null")
                     }
 
                     CodegenType.Basic.ByteArray -> {
-                        generateColumnAnn(writer, attribute)
+                        generateColumnAnn(writer, entity, attribute)
                         writer.appendLine("    open var ${decapitalized(attribute.name)}: ByteArray? = null")
                     }
 
                     CodegenType.Basic.UUID -> {
-                        generateColumnAnn(writer, attribute)
+                        generateColumnAnn(writer, entity, attribute)
                         writer.appendLine("    open var ${decapitalized(attribute.name)}: UUID? = null")
                     }
 
                     CodegenType.Basic.LocalDateTime -> {
-                        generateColumnAnn(writer, attribute)
+                        generateColumnAnn(writer, entity, attribute)
                         writer.appendLine("    open var ${decapitalized(attribute.name)}: LocalDateTime? = null")
                     }
 
                     CodegenType.Basic.ZonedDateTime -> {
-                        generateColumnAnn(writer, attribute)
+                        generateColumnAnn(writer, entity, attribute)
                         writer.appendLine("    open var ${decapitalized(attribute.name)}: ZonedDateTime? = null")
                     }
 
                     is CodegenType.OwningSide.ManyToOne -> {
-                        val targetEntity = entities.getByName(type.target)
-                        generateColumnAnn(writer, attribute)
+                        val targetEntity = try {
+                            entities.getByName(type.target)
+                        } catch (e: UnknownDomainObjectException) {
+                            throw GradleException("'target' of attribute '${attribute.name}' in entity '${entity.name}' is a unknown entity")
+                        }
+                        generateColumnAnn(writer, entity, attribute)
                         writer.appendLine("    open var ${decapitalized(attribute.name)}: ${capitalized(targetEntity.name)}Entity? = null")
                     }
                 }
@@ -265,7 +281,7 @@ abstract class CodegenTask : DefaultTask() {
         writer.appendLine("@Table$s")
     }
 
-    private fun generateColumnAnn(writer: BufferedWriter, attribute: CodegenAttribute) {
+    private fun generateColumnAnn(writer: BufferedWriter, entity: CodegenEntity, attribute: CodegenAttribute) {
         val columnName = attribute.columnName.orNull
         val columnUnique = attribute.columnUnique.orNull
         val columnNullable = attribute.columnNullable.orNull
@@ -287,7 +303,7 @@ abstract class CodegenTask : DefaultTask() {
             if (columnUpdatable != null) {
                 add("updatable = $columnUpdatable")
             }
-            when (val type = attribute.columnType.get()) {
+            when (val type = attribute.columnType.orNull ?: throw GradleException("'columnType' of attribute '${attribute.name}' in entity '${entity.name}' is not declared")) {
                 is CodegenType.Id.Integer -> Unit
                 is CodegenType.Id.Long -> Unit
                 is CodegenType.Id.UUID -> Unit
@@ -322,7 +338,7 @@ abstract class CodegenTask : DefaultTask() {
                 is CodegenType.OwningSide.ManyToOne -> Unit
             }
         }
-        when (attribute.columnType.get()) {
+        when (attribute.columnType.orNull ?: throw GradleException("'columnType' of attribute '${attribute.name}' in entity '${entity.name}' is not declared")) {
             is CodegenType.Id.Integer -> {
                 val s = if (params.isNotEmpty()) params.joinToString(prefix = "(", postfix = ")") else ""
                 writer.appendLine("    @get:Column${s}")
@@ -403,12 +419,16 @@ abstract class CodegenTask : DefaultTask() {
 
     private fun generateData(entity: CodegenEntity) {
         val packageName = entity.packageName.getOrElse("")
+        val packageDir = packageName.replace('.', '/')
+        val outputFilename = "${capitalized(entity.name)}Data.kt"
+        val generateConstrainedData = generateConstrainedData.getOrElse(true)
+        val generateComposableData = generateComposableData.getOrElse(false)
         //
         val importStatements = buildSet {
-            if (generateConstrainedData.getOrElse(true)) {
+            if (generateConstrainedData) {
                 add("import jakarta.validation.constraints.*")
             }
-            if (generateComposableData.getOrElse(false)) {
+            if (generateComposableData) {
                 add("import androidx.compose.runtime.getValue")
                 add("import androidx.compose.runtime.mutableStateOf")
                 add("import androidx.compose.runtime.setValue")
@@ -416,8 +436,8 @@ abstract class CodegenTask : DefaultTask() {
             addImportsKotlin(entity)
         }
         //
-        val outputDirectory = outputDirectory.dir(packageName.replace('.', '/')).get()
-        val outputFile = outputDirectory.file("${capitalized(entity.name)}Data.kt")
+        val outputDirectory = outputDirectory.dir(packageDir).get()
+        val outputFile = outputDirectory.file(outputFilename)
         outputDirectory.asFile.toPath().createDirectories()
         outputFile.asFile.bufferedWriter().use { writer ->
             if (packageName.isNotBlank()) {
@@ -434,14 +454,14 @@ abstract class CodegenTask : DefaultTask() {
             writer.appendLine()
             for (attribute in entity.attributes) {
                 val constraints = attribute.constraints.orNull ?: emptyList()
-                when (val type = attribute.columnType.get()) {
+                when (val type = attribute.columnType.orNull ?: throw GradleException("'columnType' of attribute '${attribute.name}' in entity '${entity.name}' is not declared")) {
                     is CodegenType.Id.Integer -> {
-                        if (generateConstrainedData.getOrElse(true)) {
+                        if (generateConstrainedData) {
                             for (constraint in constraints) {
                                 generateConstraintAnn(writer, constraint)
                             }
                         }
-                        if (generateComposableData.getOrElse(false)) {
+                        if (generateComposableData) {
                             writer.appendLine("    open var ${decapitalized(attribute.name)}: Int? by mutableStateOf(null)")
                         } else {
                             writer.appendLine("    open var ${decapitalized(attribute.name)}: Int? = null")
@@ -449,12 +469,12 @@ abstract class CodegenTask : DefaultTask() {
                     }
 
                     is CodegenType.Id.Long -> {
-                        if (generateConstrainedData.getOrElse(true)) {
+                        if (generateConstrainedData) {
                             for (constraint in constraints) {
                                 generateConstraintAnn(writer, constraint)
                             }
                         }
-                        if (generateComposableData.getOrElse(false)) {
+                        if (generateComposableData) {
                             writer.appendLine("    open var ${decapitalized(attribute.name)}: Long? by mutableStateOf(null)")
                         } else {
                             writer.appendLine("    open var ${decapitalized(attribute.name)}: Long? = null")
@@ -462,12 +482,12 @@ abstract class CodegenTask : DefaultTask() {
                     }
 
                     is CodegenType.Id.UUID -> {
-                        if (generateConstrainedData.getOrElse(true)) {
+                        if (generateConstrainedData) {
                             for (constraint in constraints) {
                                 generateConstraintAnn(writer, constraint)
                             }
                         }
-                        if (generateComposableData.getOrElse(false)) {
+                        if (generateComposableData) {
                             writer.appendLine("    open var ${decapitalized(attribute.name)}: UUID? by mutableStateOf(null)")
                         } else {
                             writer.appendLine("    open var ${decapitalized(attribute.name)}: UUID? = null")
@@ -475,12 +495,12 @@ abstract class CodegenTask : DefaultTask() {
                     }
 
                     CodegenType.Version.Integer -> {
-                        if (generateConstrainedData.getOrElse(true)) {
+                        if (generateConstrainedData) {
                             for (constraint in constraints) {
                                 generateConstraintAnn(writer, constraint)
                             }
                         }
-                        if (generateComposableData.getOrElse(false)) {
+                        if (generateComposableData) {
                             writer.appendLine("    open var ${decapitalized(attribute.name)}: Int? by mutableStateOf(null)")
                         } else {
                             writer.appendLine("    open var ${decapitalized(attribute.name)}: Int? = null")
@@ -488,12 +508,12 @@ abstract class CodegenTask : DefaultTask() {
                     }
 
                     CodegenType.Version.Long -> {
-                        if (generateConstrainedData.getOrElse(true)) {
+                        if (generateConstrainedData) {
                             for (constraint in constraints) {
                                 generateConstraintAnn(writer, constraint)
                             }
                         }
-                        if (generateComposableData.getOrElse(false)) {
+                        if (generateComposableData) {
                             writer.appendLine("    open var ${decapitalized(attribute.name)}: Long? by mutableStateOf(null)")
                         } else {
                             writer.appendLine("    open var ${decapitalized(attribute.name)}: Long? = null")
@@ -501,12 +521,12 @@ abstract class CodegenTask : DefaultTask() {
                     }
 
                     CodegenType.Basic.Integer -> {
-                        if (generateConstrainedData.getOrElse(true)) {
+                        if (generateConstrainedData) {
                             for (constraint in constraints) {
                                 generateConstraintAnn(writer, constraint)
                             }
                         }
-                        if (generateComposableData.getOrElse(false)) {
+                        if (generateComposableData) {
                             writer.appendLine("    open var ${decapitalized(attribute.name)}: Int? by mutableStateOf(null)")
                         } else {
                             writer.appendLine("    open var ${decapitalized(attribute.name)}: Int? = null")
@@ -514,12 +534,12 @@ abstract class CodegenTask : DefaultTask() {
                     }
 
                     CodegenType.Basic.Long -> {
-                        if (generateConstrainedData.getOrElse(true)) {
+                        if (generateConstrainedData) {
                             for (constraint in constraints) {
                                 generateConstraintAnn(writer, constraint)
                             }
                         }
-                        if (generateComposableData.getOrElse(false)) {
+                        if (generateComposableData) {
                             writer.appendLine("    open var ${decapitalized(attribute.name)}: Long? by mutableStateOf(null)")
                         } else {
                             writer.appendLine("    open var ${decapitalized(attribute.name)}: Long? = null")
@@ -527,12 +547,12 @@ abstract class CodegenTask : DefaultTask() {
                     }
 
                     CodegenType.Basic.Boolean -> {
-                        if (generateConstrainedData.getOrElse(true)) {
+                        if (generateConstrainedData) {
                             for (constraint in constraints) {
                                 generateConstraintAnn(writer, constraint)
                             }
                         }
-                        if (generateComposableData.getOrElse(false)) {
+                        if (generateComposableData) {
                             writer.appendLine("    open var ${decapitalized(attribute.name)}: Boolean? by mutableStateOf(null)")
                         } else {
                             writer.appendLine("    open var ${decapitalized(attribute.name)}: Boolean? = null")
@@ -540,12 +560,12 @@ abstract class CodegenTask : DefaultTask() {
                     }
 
                     is CodegenType.Basic.String -> {
-                        if (generateConstrainedData.getOrElse(true)) {
+                        if (generateConstrainedData) {
                             for (constraint in constraints) {
                                 generateConstraintAnn(writer, constraint)
                             }
                         }
-                        if (generateComposableData.getOrElse(false)) {
+                        if (generateComposableData) {
                             writer.appendLine("    open var ${decapitalized(attribute.name)}: String? by mutableStateOf(null)")
                         } else {
                             writer.appendLine("    open var ${decapitalized(attribute.name)}: String? = null")
@@ -553,12 +573,12 @@ abstract class CodegenTask : DefaultTask() {
                     }
 
                     is CodegenType.Basic.BigDecimal -> {
-                        if (generateConstrainedData.getOrElse(true)) {
+                        if (generateConstrainedData) {
                             for (constraint in constraints) {
                                 generateConstraintAnn(writer, constraint)
                             }
                         }
-                        if (generateComposableData.getOrElse(false)) {
+                        if (generateComposableData) {
                             writer.appendLine("    open var ${decapitalized(attribute.name)}: BigDecimal? by mutableStateOf(null)")
                         } else {
                             writer.appendLine("    open var ${decapitalized(attribute.name)}: BigDecimal? = null")
@@ -566,12 +586,12 @@ abstract class CodegenTask : DefaultTask() {
                     }
 
                     CodegenType.Basic.ByteArray -> {
-                        if (generateConstrainedData.getOrElse(true)) {
+                        if (generateConstrainedData) {
                             for (constraint in constraints) {
                                 generateConstraintAnn(writer, constraint)
                             }
                         }
-                        if (generateComposableData.getOrElse(false)) {
+                        if (generateComposableData) {
                             writer.appendLine("    open var ${decapitalized(attribute.name)}: ByteArray? by mutableStateOf(null)")
                         } else {
                             writer.appendLine("    open var ${decapitalized(attribute.name)}: ByteArray? = null")
@@ -579,12 +599,12 @@ abstract class CodegenTask : DefaultTask() {
                     }
 
                     CodegenType.Basic.UUID -> {
-                        if (generateConstrainedData.getOrElse(true)) {
+                        if (generateConstrainedData) {
                             for (constraint in constraints) {
                                 generateConstraintAnn(writer, constraint)
                             }
                         }
-                        if (generateComposableData.getOrElse(false)) {
+                        if (generateComposableData) {
                             writer.appendLine("    open var ${decapitalized(attribute.name)}: UUID? by mutableStateOf(null)")
                         } else {
                             writer.appendLine("    open var ${decapitalized(attribute.name)}: UUID? = null")
@@ -592,12 +612,12 @@ abstract class CodegenTask : DefaultTask() {
                     }
 
                     CodegenType.Basic.LocalDateTime -> {
-                        if (generateConstrainedData.getOrElse(true)) {
+                        if (generateConstrainedData) {
                             for (constraint in constraints) {
                                 generateConstraintAnn(writer, constraint)
                             }
                         }
-                        if (generateComposableData.getOrElse(false)) {
+                        if (generateComposableData) {
                             writer.appendLine("    open var ${decapitalized(attribute.name)}: LocalDateTime? by mutableStateOf(null)")
                         } else {
                             writer.appendLine("    open var ${decapitalized(attribute.name)}: LocalDateTime? = null")
@@ -605,12 +625,12 @@ abstract class CodegenTask : DefaultTask() {
                     }
 
                     CodegenType.Basic.ZonedDateTime -> {
-                        if (generateConstrainedData.getOrElse(true)) {
+                        if (generateConstrainedData) {
                             for (constraint in constraints) {
                                 generateConstraintAnn(writer, constraint)
                             }
                         }
-                        if (generateComposableData.getOrElse(false)) {
+                        if (generateComposableData) {
                             writer.appendLine("    open var ${decapitalized(attribute.name)}: ZonedDateTime? by mutableStateOf(null)")
                         } else {
                             writer.appendLine("    open var ${decapitalized(attribute.name)}: ZonedDateTime? = null")
@@ -618,28 +638,30 @@ abstract class CodegenTask : DefaultTask() {
                     }
 
                     is CodegenType.OwningSide.ManyToOne -> {
-                        val targetEntity = entities.getByName(type.target)
-                        val targetId = targetEntity.attributes.firstOrNull { it.columnType.get() is CodegenType.Id }
-                        if (targetId != null) {
-                            if (generateConstrainedData.getOrElse(true)) {
-                                for (constraint in constraints) {
-                                    generateConstraintAnn(writer, constraint)
-                                }
+                        val targetEntity = try {
+                            entities.getByName(type.target)
+                        } catch (e: UnknownDomainObjectException) {
+                            throw GradleException("'target' of attribute '${attribute.name}' in entity '${entity.name}' is a unknown entity")
+                        }
+                        val targetId = targetEntity.attributes.firstOrNull { it.columnType.orNull is CodegenType.Id } ?: throw GradleException("'target' of attribute '${attribute.name}' in entity '${entity.name}' does not declare an identifier")
+                        if (generateConstrainedData) {
+                            for (constraint in constraints) {
+                                generateConstraintAnn(writer, constraint)
                             }
-                            if (generateComposableData.getOrElse(false)) {
-                                when (targetId.columnType.get()) {
-                                    is CodegenType.Id.Integer -> writer.appendLine("    open var ${decapitalized(attribute.name)}${capitalized(targetId.name)}: Int? by mutableStateOf(null)")
-                                    is CodegenType.Id.Long -> writer.appendLine("    open var ${decapitalized(attribute.name)}${capitalized(targetId.name)}: Long? by mutableStateOf(null)")
-                                    is CodegenType.Id.UUID -> writer.appendLine("    open var ${decapitalized(attribute.name)}${capitalized(targetId.name)}: UUID? by mutableStateOf(null)")
-                                    else -> throw RuntimeException("This code should not be reached")
-                                }
-                            } else {
-                                when (targetId.columnType.get()) {
-                                    is CodegenType.Id.Integer -> writer.appendLine("    open var ${decapitalized(attribute.name)}${capitalized(targetId.name)}: Int? = null")
-                                    is CodegenType.Id.Long -> writer.appendLine("    open var ${decapitalized(attribute.name)}${capitalized(targetId.name)}: Long? = null")
-                                    is CodegenType.Id.UUID -> writer.appendLine("    open var ${decapitalized(attribute.name)}${capitalized(targetId.name)}: UUID? = null")
-                                    else -> throw RuntimeException("This code should not be reached")
-                                }
+                        }
+                        if (generateComposableData) {
+                            when (targetId.columnType.get()) {
+                                is CodegenType.Id.Integer -> writer.appendLine("    open var ${decapitalized(attribute.name)}${capitalized(targetId.name)}: Int? by mutableStateOf(null)")
+                                is CodegenType.Id.Long -> writer.appendLine("    open var ${decapitalized(attribute.name)}${capitalized(targetId.name)}: Long? by mutableStateOf(null)")
+                                is CodegenType.Id.UUID -> writer.appendLine("    open var ${decapitalized(attribute.name)}${capitalized(targetId.name)}: UUID? by mutableStateOf(null)")
+                                else -> throw RuntimeException("This code should not be reached")
+                            }
+                        } else {
+                            when (targetId.columnType.get()) {
+                                is CodegenType.Id.Integer -> writer.appendLine("    open var ${decapitalized(attribute.name)}${capitalized(targetId.name)}: Int? = null")
+                                is CodegenType.Id.Long -> writer.appendLine("    open var ${decapitalized(attribute.name)}${capitalized(targetId.name)}: Long? = null")
+                                is CodegenType.Id.UUID -> writer.appendLine("    open var ${decapitalized(attribute.name)}${capitalized(targetId.name)}: UUID? = null")
+                                else -> throw RuntimeException("This code should not be reached")
                             }
                         }
                     }
@@ -660,13 +682,15 @@ abstract class CodegenTask : DefaultTask() {
 
     private fun generateOrdersPredicates(entity: CodegenEntity) {
         val packageName = entity.packageName.getOrElse("")
+        val packageDir = packageName.replace('.', '/')
+        val outputFilename = "${capitalized(entity.name)}OrdersPredicates.kt"
         //
         val importStatements = buildSet {
             addImportsKotlin(entity)
         }
         //
-        val outputDirectory = outputDirectory.dir(packageName.replace('.', '/')).get()
-        val outputFile = outputDirectory.file("${capitalized(entity.name)}OrdersPredicates.kt")
+        val outputDirectory = outputDirectory.dir(packageDir).get()
+        val outputFile = outputDirectory.file(outputFilename)
         outputDirectory.asFile.toPath().createDirectories()
         outputFile.asFile.bufferedWriter().use { writer ->
             if (packageName.isNotBlank()) {
@@ -693,7 +717,7 @@ abstract class CodegenTask : DefaultTask() {
             writer.appendLine("sealed class ${capitalized(entity.name)}Predicate {")
             for (attribute in entity.attributes) {
                 writer.appendLine("    sealed class ${capitalized(attribute.name)}: ${capitalized(entity.name)}Predicate() {")
-                when (val type = attribute.columnType.get()) {
+                when (val type = attribute.columnType.orNull ?: throw GradleException("'columnType' of attribute '${attribute.name}' in entity '${entity.name}' is not declared")) {
                     is CodegenType.Id.Integer -> generatePredicatesInt(writer, attribute)
                     is CodegenType.Id.Long -> generatePredicatesLong(writer, attribute)
                     is CodegenType.Id.UUID -> generatePredicatesUUID(writer, attribute)
@@ -710,15 +734,17 @@ abstract class CodegenTask : DefaultTask() {
                     CodegenType.Basic.ZonedDateTime -> generatePredicatesZonedDateTime(writer, attribute)
 
                     is CodegenType.OwningSide.ManyToOne -> {
-                        val targetEntity = entities.getByName(type.target)
-                        val targetId = targetEntity.attributes.firstOrNull { it.columnType.get() is CodegenType.Id }
-                        if (targetId != null) {
-                            when (targetId.columnType.get()) {
-                                is CodegenType.Id.Integer -> generatePredicatesInt(writer, attribute)
-                                is CodegenType.Id.Long -> generatePredicatesLong(writer, attribute)
-                                is CodegenType.Id.UUID -> generatePredicatesUUID(writer, attribute)
-                                else -> throw RuntimeException("This code should not be reached")
-                            }
+                        val targetEntity = try {
+                            entities.getByName(type.target)
+                        } catch (e: UnknownDomainObjectException) {
+                            throw GradleException("'target' of attribute '${attribute.name}' in entity '${entity.name}' is a unknown entity")
+                        }
+                        val targetId = targetEntity.attributes.firstOrNull { it.columnType.orNull is CodegenType.Id } ?: throw GradleException("'target' of attribute '${attribute.name}' in entity '${entity.name}' does not declare an identifier")
+                        when (targetId.columnType.get()) {
+                            is CodegenType.Id.Integer -> generatePredicatesInt(writer, attribute)
+                            is CodegenType.Id.Long -> generatePredicatesLong(writer, attribute)
+                            is CodegenType.Id.UUID -> generatePredicatesUUID(writer, attribute)
+                            else -> throw RuntimeException("This code should not be reached")
                         }
                     }
                 }
@@ -902,6 +928,8 @@ abstract class CodegenTask : DefaultTask() {
 
     private fun generateExtensions(entity: CodegenEntity) {
         val packageName = entity.packageName.getOrElse("")
+        val packageDir = packageName.replace('.', '/')
+        val outputFilename = "${capitalized(entity.name)}Extension.kt"
         //
         val importStatements = buildSet {
             add("import jakarta.persistence.*")
@@ -909,8 +937,8 @@ abstract class CodegenTask : DefaultTask() {
             addImportsKotlin(entity)
         }
         //
-        val outputDirectory = outputDirectory.dir(packageName.replace('.', '/')).get()
-        val outputFile = outputDirectory.file("${capitalized(entity.name)}Extension.kt")
+        val outputDirectory = outputDirectory.dir(packageDir).get()
+        val outputFile = outputDirectory.file(outputFilename)
         outputDirectory.asFile.toPath().createDirectories()
         outputFile.asFile.bufferedWriter().use { writer ->
             if (packageName.isNotBlank()) {
@@ -927,15 +955,15 @@ abstract class CodegenTask : DefaultTask() {
             writer.appendLine("fun ${capitalized(entity.name)}Order.toOrder(criteriaBuilder: CriteriaBuilder, root: From<*, ${capitalized(entity.name)}Entity>): Order {")
             writer.appendLine("    return when (this) {")
             for (attribute in entity.attributes) {
-                val relId = when (val type = attribute.columnType.get()) {
+                val relId = when (val type = attribute.columnType.orNull ?: throw GradleException("'columnType' of attribute '${attribute.name}' in entity '${entity.name}' is not declared")) {
                     is CodegenType.OwningSide.ManyToOne -> {
-                        val targetEntity = entities.getByName(type.target)
-                        val targetId = targetEntity.attributes.firstOrNull { it.columnType.get() is CodegenType.Id }
-                        if (targetId != null) {
-                            "[${capitalized(targetEntity.name)}Entity_.${decapitalized(targetId.name)}]"
-                        } else {
-                            ""
+                        val targetEntity = try {
+                            entities.getByName(type.target)
+                        } catch (e: UnknownDomainObjectException) {
+                            throw GradleException("'target' of attribute '${attribute.name}' in entity '${entity.name}' is a unknown entity")
                         }
+                        val targetId = targetEntity.attributes.firstOrNull { it.columnType.orNull is CodegenType.Id } ?: throw GradleException("'target' of attribute '${attribute.name}' in entity '${entity.name}' does not declare an identifier")
+                        "[${capitalized(targetEntity.name)}Entity_.${decapitalized(targetId.name)}]"
                     }
 
                     else -> ""
@@ -950,15 +978,15 @@ abstract class CodegenTask : DefaultTask() {
             writer.appendLine("fun ${capitalized(entity.name)}Predicate.toPredicate(criteriaBuilder: CriteriaBuilder, root: From<*, ${capitalized(entity.name)}Entity>): Predicate {")
             writer.appendLine("    return when (this) {")
             for (attribute in entity.attributes) {
-                val relId = when (val type = attribute.columnType.get()) {
+                val relId = when (val type = attribute.columnType.orNull ?: throw GradleException("'columnType' of attribute '${attribute.name}' in entity '${entity.name}' is not declared")) {
                     is CodegenType.OwningSide.ManyToOne -> {
-                        val targetEntity = entities.getByName(type.target)
-                        val targetId = targetEntity.attributes.firstOrNull { it.columnType.get() is CodegenType.Id }
-                        if (targetId != null) {
-                            "[${capitalized(targetEntity.name)}Entity_.${decapitalized(targetId.name)}]"
-                        } else {
-                            ""
+                        val targetEntity = try {
+                            entities.getByName(type.target)
+                        } catch (e: UnknownDomainObjectException) {
+                            throw GradleException("'target' of attribute '${attribute.name}' in entity '${entity.name}' is a unknown entity")
                         }
+                        val targetId = targetEntity.attributes.firstOrNull { it.columnType.orNull is CodegenType.Id } ?: throw GradleException("'target' of attribute '${attribute.name}' in entity '${entity.name}' does not declare an identifier")
+                        "[${capitalized(targetEntity.name)}Entity_.${decapitalized(targetId.name)}]"
                     }
 
                     else -> ""
@@ -1044,8 +1072,9 @@ abstract class CodegenTask : DefaultTask() {
             writer.appendLine("@Suppress(\"UNUSED_PARAMETER\")")
             writer.appendLine("fun ${capitalized(entity.name)}Data.copyInsertablePropertiesTo(entityManager: EntityManager, entity: ${capitalized(entity.name)}Entity) {")
             for (attribute in entity.attributes) {
-                if (!attribute.columnInsertable.getOrElse(true)) continue
-                when (val type = attribute.columnType.get()) {
+                val columnInsertable = attribute.columnInsertable.getOrElse(true)
+                if (!columnInsertable) continue
+                when (val type = attribute.columnType.orNull ?: throw GradleException("'columnType' of attribute '${attribute.name}' in entity '${entity.name}' is not declared")) {
                     is CodegenType.Id.Integer -> Unit
                     is CodegenType.Id.Long -> Unit
                     is CodegenType.Id.UUID -> Unit
@@ -1062,15 +1091,17 @@ abstract class CodegenTask : DefaultTask() {
                     CodegenType.Basic.ZonedDateTime -> writer.appendLine("    entity.${decapitalized(attribute.name)} = this.${decapitalized(attribute.name)}")
 
                     is CodegenType.OwningSide.ManyToOne -> {
-                        val targetEntity = entities.getByName(type.target)
-                        val targetId = targetEntity.attributes.firstOrNull { it.columnType.get() is CodegenType.Id }
-                        if (targetId != null) {
-                            writer.appendLine("    entity.${decapitalized(attribute.name)} = if (this.${decapitalized(attribute.name)}${capitalized(targetId.name)} == null) {")
-                            writer.appendLine("        null")
-                            writer.appendLine("    } else {")
-                            writer.appendLine("        entityManager.find(${capitalized(targetEntity.name)}Entity::class.java, this.${decapitalized(attribute.name)}${capitalized(targetId.name)})")
-                            writer.appendLine("    }")
+                        val targetEntity = try {
+                            entities.getByName(type.target)
+                        } catch (e: UnknownDomainObjectException) {
+                            throw GradleException("'target' of attribute '${attribute.name}' in entity '${entity.name}' is a unknown entity")
                         }
+                        val targetId = targetEntity.attributes.firstOrNull { it.columnType.orNull is CodegenType.Id } ?: throw GradleException("'target' of attribute '${attribute.name}' in entity '${entity.name}' does not declare an identifier")
+                        writer.appendLine("    entity.${decapitalized(attribute.name)} = if (this.${decapitalized(attribute.name)}${capitalized(targetId.name)} == null) {")
+                        writer.appendLine("        null")
+                        writer.appendLine("    } else {")
+                        writer.appendLine("        entityManager.find(${capitalized(targetEntity.name)}Entity::class.java, this.${decapitalized(attribute.name)}${capitalized(targetId.name)})")
+                        writer.appendLine("    }")
                     }
                 }
             }
@@ -1080,8 +1111,9 @@ abstract class CodegenTask : DefaultTask() {
             writer.appendLine("@Suppress(\"UNUSED_PARAMETER\")")
             writer.appendLine("fun ${capitalized(entity.name)}Data.copyUpdatablePropertiesTo(entityManager: EntityManager, entity: ${capitalized(entity.name)}Entity) {")
             for (attribute in entity.attributes) {
-                if (!attribute.columnUpdatable.getOrElse(true)) continue
-                when (val type = attribute.columnType.get()) {
+                val columnUpdatable = attribute.columnUpdatable.getOrElse(true)
+                if (!columnUpdatable) continue
+                when (val type = attribute.columnType.orNull ?: throw GradleException("'columnType' of attribute '${attribute.name}' in entity '${entity.name}' is not declared")) {
                     is CodegenType.Id.Integer -> Unit
                     is CodegenType.Id.Long -> Unit
                     is CodegenType.Id.UUID -> Unit
@@ -1098,15 +1130,17 @@ abstract class CodegenTask : DefaultTask() {
                     CodegenType.Basic.ZonedDateTime -> writer.appendLine("    entity.${decapitalized(attribute.name)} = this.${decapitalized(attribute.name)}")
 
                     is CodegenType.OwningSide.ManyToOne -> {
-                        val targetEntity = entities.getByName(type.target)
-                        val targetId = targetEntity.attributes.firstOrNull { it.columnType.get() is CodegenType.Id }
-                        if (targetId != null) {
-                            writer.appendLine("    entity.${decapitalized(attribute.name)} = if (this.${decapitalized(attribute.name)}${capitalized(targetId.name)} == null) {")
-                            writer.appendLine("        null")
-                            writer.appendLine("    } else {")
-                            writer.appendLine("        entityManager.find(${capitalized(targetEntity.name)}Entity::class.java, this.${decapitalized(attribute.name)}${capitalized(targetId.name)})")
-                            writer.appendLine("    }")
+                        val targetEntity = try {
+                            entities.getByName(type.target)
+                        } catch (e: UnknownDomainObjectException) {
+                            throw GradleException("'target' of attribute '${attribute.name}' in entity '${entity.name}' is a unknown entity")
                         }
+                        val targetId = targetEntity.attributes.firstOrNull { it.columnType.orNull is CodegenType.Id } ?: throw GradleException("'target' of attribute '${attribute.name}' in entity '${entity.name}' does not declare an identifier")
+                        writer.appendLine("    entity.${decapitalized(attribute.name)} = if (this.${decapitalized(attribute.name)}${capitalized(targetId.name)} == null) {")
+                        writer.appendLine("        null")
+                        writer.appendLine("    } else {")
+                        writer.appendLine("        entityManager.find(${capitalized(targetEntity.name)}Entity::class.java, this.${decapitalized(attribute.name)}${capitalized(targetId.name)})")
+                        writer.appendLine("    }")
                     }
                 }
             }
@@ -1115,7 +1149,7 @@ abstract class CodegenTask : DefaultTask() {
             //
             writer.appendLine("fun ${capitalized(entity.name)}Entity.copyPropertiesTo(data: ${capitalized(entity.name)}Data) {")
             for (attribute in entity.attributes) {
-                when (val type = attribute.columnType.get()) {
+                when (val type = attribute.columnType.orNull ?: throw GradleException("'columnType' of attribute '${attribute.name}' in entity '${entity.name}' is not declared")) {
                     is CodegenType.Id.Integer -> writer.appendLine("    data.${decapitalized(attribute.name)} = this.${decapitalized(attribute.name)}")
                     is CodegenType.Id.Long -> writer.appendLine("    data.${decapitalized(attribute.name)} = this.${decapitalized(attribute.name)}")
                     is CodegenType.Id.UUID -> writer.appendLine("    data.${decapitalized(attribute.name)} = this.${decapitalized(attribute.name)}")
@@ -1132,15 +1166,17 @@ abstract class CodegenTask : DefaultTask() {
                     CodegenType.Basic.ZonedDateTime -> writer.appendLine("    data.${decapitalized(attribute.name)} = this.${decapitalized(attribute.name)}")
 
                     is CodegenType.OwningSide.ManyToOne -> {
-                        val targetEntity = entities.getByName(type.target)
-                        val targetId = targetEntity.attributes.firstOrNull { it.columnType.get() is CodegenType.Id }
-                        if (targetId != null) {
-                            when (targetId.columnType.get()) {
-                                is CodegenType.Id.Integer -> writer.appendLine("    data.${decapitalized(attribute.name)}${capitalized(targetId.name)} = this.${decapitalized(attribute.name)}?.${decapitalized(targetId.name)}")
-                                is CodegenType.Id.Long -> writer.appendLine("    data.${decapitalized(attribute.name)}${capitalized(targetId.name)} = this.${decapitalized(attribute.name)}?.${decapitalized(targetId.name)}")
-                                is CodegenType.Id.UUID -> writer.appendLine("    data.${decapitalized(attribute.name)}${capitalized(targetId.name)} = this.${decapitalized(attribute.name)}?.${decapitalized(targetId.name)}")
-                                else -> throw RuntimeException("This code should not be reached")
-                            }
+                        val targetEntity = try {
+                            entities.getByName(type.target)
+                        } catch (e: UnknownDomainObjectException) {
+                            throw GradleException("'target' of attribute '${attribute.name}' in entity '${entity.name}' is a unknown entity")
+                        }
+                        val targetId = targetEntity.attributes.firstOrNull { it.columnType.orNull is CodegenType.Id } ?: throw GradleException("'target' of attribute '${attribute.name}' in entity '${entity.name}' does not declare an identifier")
+                        when (targetId.columnType.get()) {
+                            is CodegenType.Id.Integer -> writer.appendLine("    data.${decapitalized(attribute.name)}${capitalized(targetId.name)} = this.${decapitalized(attribute.name)}?.${decapitalized(targetId.name)}")
+                            is CodegenType.Id.Long -> writer.appendLine("    data.${decapitalized(attribute.name)}${capitalized(targetId.name)} = this.${decapitalized(attribute.name)}?.${decapitalized(targetId.name)}")
+                            is CodegenType.Id.UUID -> writer.appendLine("    data.${decapitalized(attribute.name)}${capitalized(targetId.name)} = this.${decapitalized(attribute.name)}?.${decapitalized(targetId.name)}")
+                            else -> throw RuntimeException("This code should not be reached")
                         }
                     }
                 }
@@ -1152,7 +1188,7 @@ abstract class CodegenTask : DefaultTask() {
 
     private fun MutableSet<String>.addImportsJava(entity: CodegenEntity) {
         for (attribute in entity.attributes) {
-            when (val type = attribute.columnType.get()) {
+            when (val type = attribute.columnType.orNull ?: throw GradleException("'columnType' of attribute '${attribute.name}' in entity '${entity.name}' is not declared")) {
                 is CodegenType.Id.Integer -> Unit
                 is CodegenType.Id.Long -> Unit
                 is CodegenType.Id.UUID -> add("import java.util.UUID;")
@@ -1168,9 +1204,13 @@ abstract class CodegenTask : DefaultTask() {
                 CodegenType.Basic.LocalDateTime -> add("import java.time.LocalDateTime;")
                 CodegenType.Basic.ZonedDateTime -> add("import java.time.ZonedDateTime;")
                 is CodegenType.OwningSide.ManyToOne -> {
-                    val targetEntity = entities.getByName(type.target)
-                    val targetId = targetEntity.attributes.firstOrNull { it.columnType.get() is CodegenType.Id }
-                    if (targetId?.columnType?.get() is CodegenType.Id.UUID) {
+                    val targetEntity = try {
+                        entities.getByName(type.target)
+                    } catch (e: UnknownDomainObjectException) {
+                        throw GradleException("'target' of attribute '${attribute.name}' in entity '${entity.name}' is a unknown entity")
+                    }
+                    val targetId = targetEntity.attributes.firstOrNull { it.columnType.orNull is CodegenType.Id } ?: throw GradleException("'target' of attribute '${attribute.name}' in entity '${entity.name}' does not declare an identifier")
+                    if (targetId.columnType.get() is CodegenType.Id.UUID) {
                         add("import java.util.UUID;")
                     }
                     val targetEntityPackage = targetEntity.packageName.getOrElse("")
@@ -1188,7 +1228,7 @@ abstract class CodegenTask : DefaultTask() {
 
     private fun MutableSet<String>.addImportsKotlin(entity: CodegenEntity) {
         for (attribute in entity.attributes) {
-            when (val type = attribute.columnType.get()) {
+            when (val type = attribute.columnType.orNull ?: throw GradleException("'columnType' of attribute '${attribute.name}' in entity '${entity.name}' is not declared")) {
                 is CodegenType.Id.Integer -> Unit
                 is CodegenType.Id.Long -> Unit
                 is CodegenType.Id.UUID -> add("import java.util.UUID")
@@ -1204,9 +1244,13 @@ abstract class CodegenTask : DefaultTask() {
                 CodegenType.Basic.LocalDateTime -> add("import java.time.LocalDateTime")
                 CodegenType.Basic.ZonedDateTime -> add("import java.time.ZonedDateTime")
                 is CodegenType.OwningSide.ManyToOne -> {
-                    val targetEntity = entities.getByName(type.target)
-                    val targetId = targetEntity.attributes.firstOrNull { it.columnType.get() is CodegenType.Id }
-                    if (targetId?.columnType?.get() is CodegenType.Id.UUID) {
+                    val targetEntity = try {
+                        entities.getByName(type.target)
+                    } catch (e: UnknownDomainObjectException) {
+                        throw GradleException("'target' of attribute '${attribute.name}' in entity '${entity.name}' is a unknown entity")
+                    }
+                    val targetId = targetEntity.attributes.firstOrNull { it.columnType.orNull is CodegenType.Id } ?: throw GradleException("'target' of attribute '${attribute.name}' in entity '${entity.name}' does not declare an identifier")
+                    if (targetId.columnType.get() is CodegenType.Id.UUID) {
                         add("import java.util.UUID")
                     }
                     val targetEntityPackage = targetEntity.packageName.getOrElse("")
