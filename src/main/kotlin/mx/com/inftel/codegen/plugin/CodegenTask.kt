@@ -57,6 +57,7 @@ abstract class CodegenTask : DefaultTask() {
     @TaskAction
     fun generate() {
         for (entity in entities) {
+            generateFullInterface(entity)
             generateData(entity)
             if (generateOnlyData.getOrElse(false)) return
             generateMetamodel(entity)
@@ -417,17 +418,197 @@ abstract class CodegenTask : DefaultTask() {
         }
     }
 
-    private fun generateData(entity: CodegenEntity) {
+    private fun generateFullInterface(entity: CodegenEntity) {
         val packageName = entity.packageName.getOrElse("")
         val packageDir = packageName.replace('.', '/')
-        val outputFilename = "${capitalized(entity.name)}Data.kt"
+        val outputFilename = "I${capitalized(entity.name)}.kt"
         val generateConstrainedData = generateConstrainedData.getOrElse(true)
-        val generateComposableData = generateComposableData.getOrElse(false)
         //
         val importStatements = buildSet {
             if (generateConstrainedData) {
                 add("import jakarta.validation.constraints.*")
             }
+            addImportsKotlin(entity)
+        }
+        //
+        val outputDirectory = outputDirectory.dir(packageDir).get()
+        val outputFile = outputDirectory.file(outputFilename)
+        outputDirectory.asFile.toPath().createDirectories()
+        outputFile.asFile.bufferedWriter().use { writer ->
+            if (packageName.isNotBlank()) {
+                writer.appendLine("package $packageName")
+                writer.appendLine()
+            }
+            if (importStatements.isNotEmpty()) {
+                for (importStatement in importStatements.sorted()) {
+                    writer.appendLine(importStatement)
+                }
+                writer.appendLine()
+            }
+            writer.appendLine("interface I${capitalized(entity.name)} {")
+            writer.appendLine()
+            for (attribute in entity.attributes) {
+                val constraints = attribute.constraints.orNull ?: emptyList()
+                when (val type = attribute.columnType.orNull ?: throw GradleException("'columnType' of attribute '${attribute.name}' in entity '${entity.name}' is not declared")) {
+                    is CodegenType.Id.Integer -> {
+                        if (generateConstrainedData) {
+                            for (constraint in constraints) {
+                                generateConstraintAnn(writer, constraint)
+                            }
+                        }
+                        writer.appendLine("    var ${decapitalized(attribute.name)}: Int?")
+                    }
+
+                    is CodegenType.Id.Long -> {
+                        if (generateConstrainedData) {
+                            for (constraint in constraints) {
+                                generateConstraintAnn(writer, constraint)
+                            }
+                        }
+                        writer.appendLine("    var ${decapitalized(attribute.name)}: Long?")
+                    }
+
+                    is CodegenType.Id.UUID -> {
+                        if (generateConstrainedData) {
+                            for (constraint in constraints) {
+                                generateConstraintAnn(writer, constraint)
+                            }
+                        }
+                        writer.appendLine("    var ${decapitalized(attribute.name)}: UUID?")
+                    }
+
+                    CodegenType.Version.Integer -> {
+                        if (generateConstrainedData) {
+                            for (constraint in constraints) {
+                                generateConstraintAnn(writer, constraint)
+                            }
+                        }
+                        writer.appendLine("    var ${decapitalized(attribute.name)}: Int?")
+                    }
+
+                    CodegenType.Version.Long -> {
+                        if (generateConstrainedData) {
+                            for (constraint in constraints) {
+                                generateConstraintAnn(writer, constraint)
+                            }
+                        }
+                        writer.appendLine("    var ${decapitalized(attribute.name)}: Long?")
+                    }
+
+                    CodegenType.Basic.Integer -> {
+                        if (generateConstrainedData) {
+                            for (constraint in constraints) {
+                                generateConstraintAnn(writer, constraint)
+                            }
+                        }
+                        writer.appendLine("    var ${decapitalized(attribute.name)}: Int?")
+                    }
+
+                    CodegenType.Basic.Long -> {
+                        if (generateConstrainedData) {
+                            for (constraint in constraints) {
+                                generateConstraintAnn(writer, constraint)
+                            }
+                        }
+                        writer.appendLine("    var ${decapitalized(attribute.name)}: Long?")
+                    }
+
+                    CodegenType.Basic.Boolean -> {
+                        if (generateConstrainedData) {
+                            for (constraint in constraints) {
+                                generateConstraintAnn(writer, constraint)
+                            }
+                        }
+                        writer.appendLine("    var ${decapitalized(attribute.name)}: Boolean?")
+                    }
+
+                    is CodegenType.Basic.String -> {
+                        if (generateConstrainedData) {
+                            for (constraint in constraints) {
+                                generateConstraintAnn(writer, constraint)
+                            }
+                        }
+                        writer.appendLine("    var ${decapitalized(attribute.name)}: String?")
+                    }
+
+                    is CodegenType.Basic.BigDecimal -> {
+                        if (generateConstrainedData) {
+                            for (constraint in constraints) {
+                                generateConstraintAnn(writer, constraint)
+                            }
+                        }
+                        writer.appendLine("    var ${decapitalized(attribute.name)}: BigDecimal?")
+                    }
+
+                    CodegenType.Basic.ByteArray -> {
+                        if (generateConstrainedData) {
+                            for (constraint in constraints) {
+                                generateConstraintAnn(writer, constraint)
+                            }
+                        }
+                        writer.appendLine("    var ${decapitalized(attribute.name)}: ByteArray?")
+                    }
+
+                    CodegenType.Basic.UUID -> {
+                        if (generateConstrainedData) {
+                            for (constraint in constraints) {
+                                generateConstraintAnn(writer, constraint)
+                            }
+                        }
+                        writer.appendLine("    var ${decapitalized(attribute.name)}: UUID?")
+                    }
+
+                    CodegenType.Basic.LocalDateTime -> {
+                        if (generateConstrainedData) {
+                            for (constraint in constraints) {
+                                generateConstraintAnn(writer, constraint)
+                            }
+                        }
+                        writer.appendLine("    var ${decapitalized(attribute.name)}: LocalDateTime?")
+                    }
+
+                    CodegenType.Basic.ZonedDateTime -> {
+                        if (generateConstrainedData) {
+                            for (constraint in constraints) {
+                                generateConstraintAnn(writer, constraint)
+                            }
+                        }
+                        writer.appendLine("    var ${decapitalized(attribute.name)}: ZonedDateTime?")
+                    }
+
+                    is CodegenType.OwningSide.ManyToOne -> {
+                        val targetEntity = try {
+                            entities.getByName(type.target)
+                        } catch (e: UnknownDomainObjectException) {
+                            throw GradleException("'target' of attribute '${attribute.name}' in entity '${entity.name}' is a unknown entity")
+                        }
+                        val targetId = targetEntity.attributes.firstOrNull { it.columnType.orNull is CodegenType.Id } ?: throw GradleException("'target' of attribute '${attribute.name}' in entity '${entity.name}' does not declare an identifier")
+                        if (generateConstrainedData) {
+                            for (constraint in constraints) {
+                                generateConstraintAnn(writer, constraint)
+                            }
+                        }
+                        when (targetId.columnType.get()) {
+                            is CodegenType.Id.Integer -> writer.appendLine("    var ${decapitalized(attribute.name)}${capitalized(targetId.name)}: Int?")
+                            is CodegenType.Id.Long -> writer.appendLine("    var ${decapitalized(attribute.name)}${capitalized(targetId.name)}: Long?")
+                            is CodegenType.Id.UUID -> writer.appendLine("    var ${decapitalized(attribute.name)}${capitalized(targetId.name)}: UUID?")
+                            else -> throw RuntimeException("This code should not be reached")
+                        }
+                    }
+                }
+                writer.appendLine()
+            }
+            writer.appendLine("}")
+        }
+    }
+
+    private fun generateData(entity: CodegenEntity) {
+        val packageName = entity.packageName.getOrElse("")
+        val packageDir = packageName.replace('.', '/')
+        val outputFilename = "${capitalized(entity.name)}Data.kt"
+        val generateComposableData = generateComposableData.getOrElse(false)
+        //
+        val importStatements = buildSet {
             if (generateComposableData) {
                 add("import androidx.compose.runtime.getValue")
                 add("import androidx.compose.runtime.mutableStateOf")
@@ -450,190 +631,119 @@ abstract class CodegenTask : DefaultTask() {
                 }
                 writer.appendLine()
             }
-            writer.appendLine("open class ${capitalized(entity.name)}Data {")
+            writer.appendLine("open class ${capitalized(entity.name)}Data : I${capitalized(entity.name)} {")
             writer.appendLine()
             for (attribute in entity.attributes) {
-                val constraints = attribute.constraints.orNull ?: emptyList()
                 when (val type = attribute.columnType.orNull ?: throw GradleException("'columnType' of attribute '${attribute.name}' in entity '${entity.name}' is not declared")) {
                     is CodegenType.Id.Integer -> {
-                        if (generateConstrainedData) {
-                            for (constraint in constraints) {
-                                generateConstraintAnn(writer, constraint)
-                            }
-                        }
                         if (generateComposableData) {
-                            writer.appendLine("    open var ${decapitalized(attribute.name)}: Int? by mutableStateOf(null)")
+                            writer.appendLine("    override var ${decapitalized(attribute.name)}: Int? by mutableStateOf(null)")
                         } else {
-                            writer.appendLine("    open var ${decapitalized(attribute.name)}: Int? = null")
+                            writer.appendLine("    override var ${decapitalized(attribute.name)}: Int? = null")
                         }
                     }
 
                     is CodegenType.Id.Long -> {
-                        if (generateConstrainedData) {
-                            for (constraint in constraints) {
-                                generateConstraintAnn(writer, constraint)
-                            }
-                        }
                         if (generateComposableData) {
-                            writer.appendLine("    open var ${decapitalized(attribute.name)}: Long? by mutableStateOf(null)")
+                            writer.appendLine("    override var ${decapitalized(attribute.name)}: Long? by mutableStateOf(null)")
                         } else {
-                            writer.appendLine("    open var ${decapitalized(attribute.name)}: Long? = null")
+                            writer.appendLine("    override var ${decapitalized(attribute.name)}: Long? = null")
                         }
                     }
 
                     is CodegenType.Id.UUID -> {
-                        if (generateConstrainedData) {
-                            for (constraint in constraints) {
-                                generateConstraintAnn(writer, constraint)
-                            }
-                        }
                         if (generateComposableData) {
-                            writer.appendLine("    open var ${decapitalized(attribute.name)}: UUID? by mutableStateOf(null)")
+                            writer.appendLine("    override var ${decapitalized(attribute.name)}: UUID? by mutableStateOf(null)")
                         } else {
-                            writer.appendLine("    open var ${decapitalized(attribute.name)}: UUID? = null")
+                            writer.appendLine("    override var ${decapitalized(attribute.name)}: UUID? = null")
                         }
                     }
 
                     CodegenType.Version.Integer -> {
-                        if (generateConstrainedData) {
-                            for (constraint in constraints) {
-                                generateConstraintAnn(writer, constraint)
-                            }
-                        }
                         if (generateComposableData) {
-                            writer.appendLine("    open var ${decapitalized(attribute.name)}: Int? by mutableStateOf(null)")
+                            writer.appendLine("    override var ${decapitalized(attribute.name)}: Int? by mutableStateOf(null)")
                         } else {
-                            writer.appendLine("    open var ${decapitalized(attribute.name)}: Int? = null")
+                            writer.appendLine("    override var ${decapitalized(attribute.name)}: Int? = null")
                         }
                     }
 
                     CodegenType.Version.Long -> {
-                        if (generateConstrainedData) {
-                            for (constraint in constraints) {
-                                generateConstraintAnn(writer, constraint)
-                            }
-                        }
                         if (generateComposableData) {
-                            writer.appendLine("    open var ${decapitalized(attribute.name)}: Long? by mutableStateOf(null)")
+                            writer.appendLine("    override var ${decapitalized(attribute.name)}: Long? by mutableStateOf(null)")
                         } else {
-                            writer.appendLine("    open var ${decapitalized(attribute.name)}: Long? = null")
+                            writer.appendLine("    override var ${decapitalized(attribute.name)}: Long? = null")
                         }
                     }
 
                     CodegenType.Basic.Integer -> {
-                        if (generateConstrainedData) {
-                            for (constraint in constraints) {
-                                generateConstraintAnn(writer, constraint)
-                            }
-                        }
                         if (generateComposableData) {
-                            writer.appendLine("    open var ${decapitalized(attribute.name)}: Int? by mutableStateOf(null)")
+                            writer.appendLine("    override var ${decapitalized(attribute.name)}: Int? by mutableStateOf(null)")
                         } else {
-                            writer.appendLine("    open var ${decapitalized(attribute.name)}: Int? = null")
+                            writer.appendLine("    override var ${decapitalized(attribute.name)}: Int? = null")
                         }
                     }
 
                     CodegenType.Basic.Long -> {
-                        if (generateConstrainedData) {
-                            for (constraint in constraints) {
-                                generateConstraintAnn(writer, constraint)
-                            }
-                        }
                         if (generateComposableData) {
-                            writer.appendLine("    open var ${decapitalized(attribute.name)}: Long? by mutableStateOf(null)")
+                            writer.appendLine("    override var ${decapitalized(attribute.name)}: Long? by mutableStateOf(null)")
                         } else {
-                            writer.appendLine("    open var ${decapitalized(attribute.name)}: Long? = null")
+                            writer.appendLine("    override var ${decapitalized(attribute.name)}: Long? = null")
                         }
                     }
 
                     CodegenType.Basic.Boolean -> {
-                        if (generateConstrainedData) {
-                            for (constraint in constraints) {
-                                generateConstraintAnn(writer, constraint)
-                            }
-                        }
                         if (generateComposableData) {
-                            writer.appendLine("    open var ${decapitalized(attribute.name)}: Boolean? by mutableStateOf(null)")
+                            writer.appendLine("    override var ${decapitalized(attribute.name)}: Boolean? by mutableStateOf(null)")
                         } else {
-                            writer.appendLine("    open var ${decapitalized(attribute.name)}: Boolean? = null")
+                            writer.appendLine("    override var ${decapitalized(attribute.name)}: Boolean? = null")
                         }
                     }
 
                     is CodegenType.Basic.String -> {
-                        if (generateConstrainedData) {
-                            for (constraint in constraints) {
-                                generateConstraintAnn(writer, constraint)
-                            }
-                        }
                         if (generateComposableData) {
-                            writer.appendLine("    open var ${decapitalized(attribute.name)}: String? by mutableStateOf(null)")
+                            writer.appendLine("    override var ${decapitalized(attribute.name)}: String? by mutableStateOf(null)")
                         } else {
-                            writer.appendLine("    open var ${decapitalized(attribute.name)}: String? = null")
+                            writer.appendLine("    override var ${decapitalized(attribute.name)}: String? = null")
                         }
                     }
 
                     is CodegenType.Basic.BigDecimal -> {
-                        if (generateConstrainedData) {
-                            for (constraint in constraints) {
-                                generateConstraintAnn(writer, constraint)
-                            }
-                        }
                         if (generateComposableData) {
-                            writer.appendLine("    open var ${decapitalized(attribute.name)}: BigDecimal? by mutableStateOf(null)")
+                            writer.appendLine("    override var ${decapitalized(attribute.name)}: BigDecimal? by mutableStateOf(null)")
                         } else {
-                            writer.appendLine("    open var ${decapitalized(attribute.name)}: BigDecimal? = null")
+                            writer.appendLine("    override var ${decapitalized(attribute.name)}: BigDecimal? = null")
                         }
                     }
 
                     CodegenType.Basic.ByteArray -> {
-                        if (generateConstrainedData) {
-                            for (constraint in constraints) {
-                                generateConstraintAnn(writer, constraint)
-                            }
-                        }
                         if (generateComposableData) {
-                            writer.appendLine("    open var ${decapitalized(attribute.name)}: ByteArray? by mutableStateOf(null)")
+                            writer.appendLine("    override var ${decapitalized(attribute.name)}: ByteArray? by mutableStateOf(null)")
                         } else {
-                            writer.appendLine("    open var ${decapitalized(attribute.name)}: ByteArray? = null")
+                            writer.appendLine("    override var ${decapitalized(attribute.name)}: ByteArray? = null")
                         }
                     }
 
                     CodegenType.Basic.UUID -> {
-                        if (generateConstrainedData) {
-                            for (constraint in constraints) {
-                                generateConstraintAnn(writer, constraint)
-                            }
-                        }
                         if (generateComposableData) {
-                            writer.appendLine("    open var ${decapitalized(attribute.name)}: UUID? by mutableStateOf(null)")
+                            writer.appendLine("    override var ${decapitalized(attribute.name)}: UUID? by mutableStateOf(null)")
                         } else {
-                            writer.appendLine("    open var ${decapitalized(attribute.name)}: UUID? = null")
+                            writer.appendLine("    override var ${decapitalized(attribute.name)}: UUID? = null")
                         }
                     }
 
                     CodegenType.Basic.LocalDateTime -> {
-                        if (generateConstrainedData) {
-                            for (constraint in constraints) {
-                                generateConstraintAnn(writer, constraint)
-                            }
-                        }
                         if (generateComposableData) {
-                            writer.appendLine("    open var ${decapitalized(attribute.name)}: LocalDateTime? by mutableStateOf(null)")
+                            writer.appendLine("    override var ${decapitalized(attribute.name)}: LocalDateTime? by mutableStateOf(null)")
                         } else {
-                            writer.appendLine("    open var ${decapitalized(attribute.name)}: LocalDateTime? = null")
+                            writer.appendLine("    override var ${decapitalized(attribute.name)}: LocalDateTime? = null")
                         }
                     }
 
                     CodegenType.Basic.ZonedDateTime -> {
-                        if (generateConstrainedData) {
-                            for (constraint in constraints) {
-                                generateConstraintAnn(writer, constraint)
-                            }
-                        }
                         if (generateComposableData) {
-                            writer.appendLine("    open var ${decapitalized(attribute.name)}: ZonedDateTime? by mutableStateOf(null)")
+                            writer.appendLine("    override var ${decapitalized(attribute.name)}: ZonedDateTime? by mutableStateOf(null)")
                         } else {
-                            writer.appendLine("    open var ${decapitalized(attribute.name)}: ZonedDateTime? = null")
+                            writer.appendLine("    override var ${decapitalized(attribute.name)}: ZonedDateTime? = null")
                         }
                     }
 
@@ -644,23 +754,18 @@ abstract class CodegenTask : DefaultTask() {
                             throw GradleException("'target' of attribute '${attribute.name}' in entity '${entity.name}' is a unknown entity")
                         }
                         val targetId = targetEntity.attributes.firstOrNull { it.columnType.orNull is CodegenType.Id } ?: throw GradleException("'target' of attribute '${attribute.name}' in entity '${entity.name}' does not declare an identifier")
-                        if (generateConstrainedData) {
-                            for (constraint in constraints) {
-                                generateConstraintAnn(writer, constraint)
-                            }
-                        }
                         if (generateComposableData) {
                             when (targetId.columnType.get()) {
-                                is CodegenType.Id.Integer -> writer.appendLine("    open var ${decapitalized(attribute.name)}${capitalized(targetId.name)}: Int? by mutableStateOf(null)")
-                                is CodegenType.Id.Long -> writer.appendLine("    open var ${decapitalized(attribute.name)}${capitalized(targetId.name)}: Long? by mutableStateOf(null)")
-                                is CodegenType.Id.UUID -> writer.appendLine("    open var ${decapitalized(attribute.name)}${capitalized(targetId.name)}: UUID? by mutableStateOf(null)")
+                                is CodegenType.Id.Integer -> writer.appendLine("    override var ${decapitalized(attribute.name)}${capitalized(targetId.name)}: Int? by mutableStateOf(null)")
+                                is CodegenType.Id.Long -> writer.appendLine("    override var ${decapitalized(attribute.name)}${capitalized(targetId.name)}: Long? by mutableStateOf(null)")
+                                is CodegenType.Id.UUID -> writer.appendLine("    override var ${decapitalized(attribute.name)}${capitalized(targetId.name)}: UUID? by mutableStateOf(null)")
                                 else -> throw RuntimeException("This code should not be reached")
                             }
                         } else {
                             when (targetId.columnType.get()) {
-                                is CodegenType.Id.Integer -> writer.appendLine("    open var ${decapitalized(attribute.name)}${capitalized(targetId.name)}: Int? = null")
-                                is CodegenType.Id.Long -> writer.appendLine("    open var ${decapitalized(attribute.name)}${capitalized(targetId.name)}: Long? = null")
-                                is CodegenType.Id.UUID -> writer.appendLine("    open var ${decapitalized(attribute.name)}${capitalized(targetId.name)}: UUID? = null")
+                                is CodegenType.Id.Integer -> writer.appendLine("    override var ${decapitalized(attribute.name)}${capitalized(targetId.name)}: Int? = null")
+                                is CodegenType.Id.Long -> writer.appendLine("    override var ${decapitalized(attribute.name)}${capitalized(targetId.name)}: Long? = null")
+                                is CodegenType.Id.UUID -> writer.appendLine("    override var ${decapitalized(attribute.name)}${capitalized(targetId.name)}: UUID? = null")
                                 else -> throw RuntimeException("This code should not be reached")
                             }
                         }
@@ -1070,7 +1175,7 @@ abstract class CodegenTask : DefaultTask() {
             writer.appendLine()
             //
             writer.appendLine("@Suppress(\"UNUSED_PARAMETER\")")
-            writer.appendLine("fun ${capitalized(entity.name)}Data.copyInsertablePropertiesTo(entityManager: EntityManager, entity: ${capitalized(entity.name)}Entity) {")
+            writer.appendLine("fun I${capitalized(entity.name)}.copyInsertablePropertiesTo(entityManager: EntityManager, entity: ${capitalized(entity.name)}Entity) {")
             for (attribute in entity.attributes) {
                 val columnInsertable = attribute.columnInsertable.getOrElse(true)
                 if (!columnInsertable) continue
@@ -1109,7 +1214,7 @@ abstract class CodegenTask : DefaultTask() {
             writer.appendLine()
             //
             writer.appendLine("@Suppress(\"UNUSED_PARAMETER\")")
-            writer.appendLine("fun ${capitalized(entity.name)}Data.copyUpdatablePropertiesTo(entityManager: EntityManager, entity: ${capitalized(entity.name)}Entity) {")
+            writer.appendLine("fun I${capitalized(entity.name)}.copyUpdatablePropertiesTo(entityManager: EntityManager, entity: ${capitalized(entity.name)}Entity) {")
             for (attribute in entity.attributes) {
                 val columnUpdatable = attribute.columnUpdatable.getOrElse(true)
                 if (!columnUpdatable) continue
@@ -1147,7 +1252,7 @@ abstract class CodegenTask : DefaultTask() {
             writer.appendLine("}")
             writer.appendLine()
             //
-            writer.appendLine("fun ${capitalized(entity.name)}Entity.copyPropertiesTo(data: ${capitalized(entity.name)}Data) {")
+            writer.appendLine("fun ${capitalized(entity.name)}Entity.copyPropertiesTo(data: I${capitalized(entity.name)}) {")
             for (attribute in entity.attributes) {
                 when (val type = attribute.columnType.orNull ?: throw GradleException("'columnType' of attribute '${attribute.name}' in entity '${entity.name}' is not declared")) {
                     is CodegenType.Id.Integer -> writer.appendLine("    data.${decapitalized(attribute.name)} = this.${decapitalized(attribute.name)}")
