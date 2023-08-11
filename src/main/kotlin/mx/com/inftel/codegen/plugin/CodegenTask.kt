@@ -811,10 +811,23 @@ abstract class CodegenTask : DefaultTask() {
             //
             writer.appendLine("sealed class ${capitalized(entity.name)}Order {")
             for (attribute in entity.attributes) {
-                writer.appendLine("    sealed class ${capitalized(attribute.name)}: ${capitalized(entity.name)}Order() {")
-                writer.appendLine("        object Ascending: ${capitalized(attribute.name)}()")
-                writer.appendLine("        object Descending: ${capitalized(attribute.name)}()")
-                writer.appendLine("    }")
+                when (val type = attribute.columnType.orNull ?: throw GradleException("'columnType' of attribute '${attribute.name}' in entity '${entity.name}' is not declared")) {
+                    is CodegenType.OwningSide.ManyToOne -> {
+                        val targetEntity = try {
+                            entities.getByName(type.target)
+                        } catch (e: UnknownDomainObjectException) {
+                            throw GradleException("'target' of attribute '${attribute.name}' in entity '${entity.name}' is a unknown entity")
+                        }
+                        writer.appendLine("    sealed class ${capitalized(attribute.name)}(val x: ${capitalized(targetEntity.name)}Order): ${capitalized(entity.name)}Order()")
+                    }
+
+                    else -> {
+                        writer.appendLine("    sealed class ${capitalized(attribute.name)}: ${capitalized(entity.name)}Order() {")
+                        writer.appendLine("        object Ascending: ${capitalized(attribute.name)}()")
+                        writer.appendLine("        object Descending: ${capitalized(attribute.name)}()")
+                        writer.appendLine("    }")
+                    }
+                }
             }
             writer.appendLine("}")
             writer.appendLine()
@@ -1133,24 +1146,35 @@ abstract class CodegenTask : DefaultTask() {
                 writer.appendLine()
             }
             //
-            writer.appendLine("fun ${capitalized(entity.name)}Order.toOrder(criteriaBuilder: CriteriaBuilder, root: From<*, ${capitalized(entity.name)}Entity>): Order {")
+            writer.appendLine("fun ${capitalized(entity.name)}Order.toOrder(criteriaBuilder: CriteriaBuilder, root: Path<${capitalized(entity.name)}Entity>): Order {")
             writer.appendLine("    return when (this) {")
             for (attribute in entity.attributes) {
-                val relId = when (val type = attribute.columnType.orNull ?: throw GradleException("'columnType' of attribute '${attribute.name}' in entity '${entity.name}' is not declared")) {
+                when (attribute.columnType.orNull ?: throw GradleException("'columnType' of attribute '${attribute.name}' in entity '${entity.name}' is not declared")) {
                     is CodegenType.OwningSide.ManyToOne -> {
-                        val targetEntity = try {
-                            entities.getByName(type.target)
-                        } catch (e: UnknownDomainObjectException) {
-                            throw GradleException("'target' of attribute '${attribute.name}' in entity '${entity.name}' is a unknown entity")
-                        }
-                        val targetId = targetEntity.attributes.firstOrNull { it.columnType.orNull is CodegenType.Id } ?: throw GradleException("'target' of attribute '${attribute.name}' in entity '${entity.name}' does not declare an identifier")
-                        "[${capitalized(targetEntity.name)}Entity_.${decapitalized(targetId.name)}]"
+                        writer.appendLine("        is ${capitalized(entity.name)}Order.${capitalized(attribute.name)} -> this.x.toOrder(criteriaBuilder, root[${capitalized(entity.name)}Entity_.${decapitalized(attribute.name)}])")
                     }
 
-                    else -> ""
+                    else -> {
+                        writer.appendLine("        ${capitalized(entity.name)}Order.${capitalized(attribute.name)}.Ascending -> criteriaBuilder.asc(root[${capitalized(entity.name)}Entity_.${decapitalized(attribute.name)}])")
+                        writer.appendLine("        ${capitalized(entity.name)}Order.${capitalized(attribute.name)}.Descending -> criteriaBuilder.desc(root[${capitalized(entity.name)}Entity_.${decapitalized(attribute.name)}])")
+                    }
                 }
-                writer.appendLine("        ${capitalized(entity.name)}Order.${capitalized(attribute.name)}.Ascending -> criteriaBuilder.asc(root[${capitalized(entity.name)}Entity_.${decapitalized(attribute.name)}]${relId})")
-                writer.appendLine("        ${capitalized(entity.name)}Order.${capitalized(attribute.name)}.Descending -> criteriaBuilder.desc(root[${capitalized(entity.name)}Entity_.${decapitalized(attribute.name)}]${relId})")
+
+//                val relId = when (val type = attribute.columnType.orNull ?: throw GradleException("'columnType' of attribute '${attribute.name}' in entity '${entity.name}' is not declared")) {
+//                    is CodegenType.OwningSide.ManyToOne -> {
+//                        val targetEntity = try {
+//                            entities.getByName(type.target)
+//                        } catch (e: UnknownDomainObjectException) {
+//                            throw GradleException("'target' of attribute '${attribute.name}' in entity '${entity.name}' is a unknown entity")
+//                        }
+//                        val targetId = targetEntity.attributes.firstOrNull { it.columnType.orNull is CodegenType.Id } ?: throw GradleException("'target' of attribute '${attribute.name}' in entity '${entity.name}' does not declare an identifier")
+//                        "[${capitalized(targetEntity.name)}Entity_.${decapitalized(targetId.name)}]"
+//                    }
+//
+//                    else -> ""
+//                }
+//                writer.appendLine("        ${capitalized(entity.name)}Order.${capitalized(attribute.name)}.Ascending -> criteriaBuilder.asc(root[${capitalized(entity.name)}Entity_.${decapitalized(attribute.name)}]${relId})")
+//                writer.appendLine("        ${capitalized(entity.name)}Order.${capitalized(attribute.name)}.Descending -> criteriaBuilder.desc(root[${capitalized(entity.name)}Entity_.${decapitalized(attribute.name)}]${relId})")
             }
             writer.appendLine("    }")
             writer.appendLine("}")
