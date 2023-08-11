@@ -821,22 +821,90 @@ abstract class CodegenTask : DefaultTask() {
             //
             writer.appendLine("sealed class ${capitalized(entity.name)}Predicate {")
             for (attribute in entity.attributes) {
-                writer.appendLine("    sealed class ${capitalized(attribute.name)}: ${capitalized(entity.name)}Predicate() {")
                 when (val type = attribute.columnType.orNull ?: throw GradleException("'columnType' of attribute '${attribute.name}' in entity '${entity.name}' is not declared")) {
-                    is CodegenType.Id.Integer -> generatePredicatesInt(writer, attribute)
-                    is CodegenType.Id.Long -> generatePredicatesLong(writer, attribute)
-                    is CodegenType.Id.UUID -> generatePredicatesUUID(writer, attribute)
-                    CodegenType.Version.Integer -> generatePredicatesInt(writer, attribute)
-                    CodegenType.Version.Long -> generatePredicatesLong(writer, attribute)
-                    CodegenType.Basic.Integer -> generatePredicatesInt(writer, attribute)
-                    CodegenType.Basic.Long -> generatePredicatesLong(writer, attribute)
-                    CodegenType.Basic.Boolean -> generatePredicatesBoolean(writer, attribute)
-                    is CodegenType.Basic.String -> generatePredicatesString(writer, attribute)
-                    is CodegenType.Basic.BigDecimal -> generatePredicatesBigDecimal(writer, attribute)
-                    CodegenType.Basic.ByteArray -> generatePredicatesByteArray(writer, attribute)
-                    CodegenType.Basic.UUID -> generatePredicatesUUID(writer, attribute)
-                    CodegenType.Basic.LocalDateTime -> generatePredicatesLocalDateTime(writer, attribute)
-                    CodegenType.Basic.ZonedDateTime -> generatePredicatesZonedDateTime(writer, attribute)
+                    is CodegenType.Id.Integer -> {
+                        writer.appendLine("    sealed class ${capitalized(attribute.name)}: ${capitalized(entity.name)}Predicate() {")
+                        generatePredicatesInt(writer, attribute)
+                        writer.appendLine("    }")
+                    }
+
+                    is CodegenType.Id.Long -> {
+                        writer.appendLine("    sealed class ${capitalized(attribute.name)}: ${capitalized(entity.name)}Predicate() {")
+                        generatePredicatesLong(writer, attribute)
+                        writer.appendLine("    }")
+                    }
+
+                    is CodegenType.Id.UUID -> {
+                        writer.appendLine("    sealed class ${capitalized(attribute.name)}: ${capitalized(entity.name)}Predicate() {")
+                        generatePredicatesUUID(writer, attribute)
+                        writer.appendLine("    }")
+                    }
+
+                    CodegenType.Version.Integer -> {
+                        writer.appendLine("    sealed class ${capitalized(attribute.name)}: ${capitalized(entity.name)}Predicate() {")
+                        generatePredicatesInt(writer, attribute)
+                        writer.appendLine("    }")
+                    }
+
+                    CodegenType.Version.Long -> {
+                        writer.appendLine("    sealed class ${capitalized(attribute.name)}: ${capitalized(entity.name)}Predicate() {")
+                        generatePredicatesLong(writer, attribute)
+                        writer.appendLine("    }")
+                    }
+
+                    CodegenType.Basic.Integer -> {
+                        writer.appendLine("    sealed class ${capitalized(attribute.name)}: ${capitalized(entity.name)}Predicate() {")
+                        generatePredicatesInt(writer, attribute)
+                        writer.appendLine("    }")
+                    }
+
+                    CodegenType.Basic.Long -> {
+                        writer.appendLine("    sealed class ${capitalized(attribute.name)}: ${capitalized(entity.name)}Predicate() {")
+                        generatePredicatesLong(writer, attribute)
+                        writer.appendLine("    }")
+                    }
+
+                    CodegenType.Basic.Boolean -> {
+                        writer.appendLine("    sealed class ${capitalized(attribute.name)}: ${capitalized(entity.name)}Predicate() {")
+                        generatePredicatesBoolean(writer, attribute)
+                        writer.appendLine("    }")
+                    }
+
+                    is CodegenType.Basic.String -> {
+                        writer.appendLine("    sealed class ${capitalized(attribute.name)}: ${capitalized(entity.name)}Predicate() {")
+                        generatePredicatesString(writer, attribute)
+                        writer.appendLine("    }")
+                    }
+
+                    is CodegenType.Basic.BigDecimal -> {
+                        writer.appendLine("    sealed class ${capitalized(attribute.name)}: ${capitalized(entity.name)}Predicate() {")
+                        generatePredicatesBigDecimal(writer, attribute)
+                        writer.appendLine("    }")
+                    }
+
+                    CodegenType.Basic.ByteArray -> {
+                        writer.appendLine("    sealed class ${capitalized(attribute.name)}: ${capitalized(entity.name)}Predicate() {")
+                        generatePredicatesByteArray(writer, attribute)
+                        writer.appendLine("    }")
+                    }
+
+                    CodegenType.Basic.UUID -> {
+                        writer.appendLine("    sealed class ${capitalized(attribute.name)}: ${capitalized(entity.name)}Predicate() {")
+                        generatePredicatesUUID(writer, attribute)
+                        writer.appendLine("    }")
+                    }
+
+                    CodegenType.Basic.LocalDateTime -> {
+                        writer.appendLine("    sealed class ${capitalized(attribute.name)}: ${capitalized(entity.name)}Predicate() {")
+                        generatePredicatesLocalDateTime(writer, attribute)
+                        writer.appendLine("    }")
+                    }
+
+                    CodegenType.Basic.ZonedDateTime -> {
+                        writer.appendLine("    sealed class ${capitalized(attribute.name)}: ${capitalized(entity.name)}Predicate() {")
+                        generatePredicatesZonedDateTime(writer, attribute)
+                        writer.appendLine("    }")
+                    }
 
                     is CodegenType.OwningSide.ManyToOne -> {
                         val targetEntity = try {
@@ -844,16 +912,24 @@ abstract class CodegenTask : DefaultTask() {
                         } catch (e: UnknownDomainObjectException) {
                             throw GradleException("'target' of attribute '${attribute.name}' in entity '${entity.name}' is a unknown entity")
                         }
-                        val targetId = targetEntity.attributes.firstOrNull { it.columnType.orNull is CodegenType.Id } ?: throw GradleException("'target' of attribute '${attribute.name}' in entity '${entity.name}' does not declare an identifier")
-                        when (targetId.columnType.get()) {
-                            is CodegenType.Id.Integer -> generatePredicatesInt(writer, attribute)
-                            is CodegenType.Id.Long -> generatePredicatesLong(writer, attribute)
-                            is CodegenType.Id.UUID -> generatePredicatesUUID(writer, attribute)
-                            else -> throw RuntimeException("This code should not be reached")
-                        }
+                        writer.appendLine("    sealed class ${capitalized(attribute.name)}(val x: ${capitalized(targetEntity.name)}Predicate): ${capitalized(entity.name)}Predicate()")
                     }
+
+//                    is CodegenType.OwningSide.ManyToOne -> {
+//                        val targetEntity = try {
+//                            entities.getByName(type.target)
+//                        } catch (e: UnknownDomainObjectException) {
+//                            throw GradleException("'target' of attribute '${attribute.name}' in entity '${entity.name}' is a unknown entity")
+//                        }
+//                        val targetId = targetEntity.attributes.firstOrNull { it.columnType.orNull is CodegenType.Id } ?: throw GradleException("'target' of attribute '${attribute.name}' in entity '${entity.name}' does not declare an identifier")
+//                        when (targetId.columnType.get()) {
+//                            is CodegenType.Id.Integer -> generatePredicatesInt(writer, attribute)
+//                            is CodegenType.Id.Long -> generatePredicatesLong(writer, attribute)
+//                            is CodegenType.Id.UUID -> generatePredicatesUUID(writer, attribute)
+//                            else -> throw RuntimeException("This code should not be reached")
+//                        }
+//                    }
                 }
-                writer.appendLine("    }")
             }
             writer.appendLine("}")
             writer.appendLine()
@@ -1080,42 +1156,71 @@ abstract class CodegenTask : DefaultTask() {
             writer.appendLine("}")
             writer.appendLine()
             //
-            writer.appendLine("fun ${capitalized(entity.name)}Predicate.toPredicate(criteriaBuilder: CriteriaBuilder, root: From<*, ${capitalized(entity.name)}Entity>): Predicate {")
+            writer.appendLine("fun ${capitalized(entity.name)}Predicate.toPredicate(criteriaBuilder: CriteriaBuilder, root: Path<${capitalized(entity.name)}Entity>): Predicate {")
             writer.appendLine("    return when (this) {")
             for (attribute in entity.attributes) {
-                val relId = when (val type = attribute.columnType.orNull ?: throw GradleException("'columnType' of attribute '${attribute.name}' in entity '${entity.name}' is not declared")) {
+                when (attribute.columnType.orNull ?: throw GradleException("'columnType' of attribute '${attribute.name}' in entity '${entity.name}' is not declared")) {
                     is CodegenType.OwningSide.ManyToOne -> {
-                        val targetEntity = try {
-                            entities.getByName(type.target)
-                        } catch (e: UnknownDomainObjectException) {
-                            throw GradleException("'target' of attribute '${attribute.name}' in entity '${entity.name}' is a unknown entity")
-                        }
-                        val targetId = targetEntity.attributes.firstOrNull { it.columnType.orNull is CodegenType.Id } ?: throw GradleException("'target' of attribute '${attribute.name}' in entity '${entity.name}' does not declare an identifier")
-                        "[${capitalized(targetEntity.name)}Entity_.${decapitalized(targetId.name)}]"
+                        writer.appendLine("        is ${capitalized(entity.name)}Predicate.${capitalized(attribute.name)} -> this.x.toPredicate(criteriaBuilder, root[${capitalized(entity.name)}Entity_.${decapitalized(attribute.name)}])")
                     }
 
-                    else -> ""
+                    else -> {
+                        writer.appendLine("        is ${capitalized(entity.name)}Predicate.${capitalized(attribute.name)}.Between -> criteriaBuilder.between(root[${capitalized(entity.name)}Entity_.${decapitalized(attribute.name)}], this.x, this.y)")
+                        writer.appendLine("        is ${capitalized(entity.name)}Predicate.${capitalized(attribute.name)}.Equal -> criteriaBuilder.equal(root[${capitalized(entity.name)}Entity_.${decapitalized(attribute.name)}], this.x)")
+                        writer.appendLine("        is ${capitalized(entity.name)}Predicate.${capitalized(attribute.name)}.GreaterThan -> criteriaBuilder.greaterThan(root[${capitalized(entity.name)}Entity_.${decapitalized(attribute.name)}], this.x)")
+                        writer.appendLine("        is ${capitalized(entity.name)}Predicate.${capitalized(attribute.name)}.GreaterThanOrEqualTo -> criteriaBuilder.greaterThanOrEqualTo(root[${capitalized(entity.name)}Entity_.${decapitalized(attribute.name)}], this.x)")
+                        writer.appendLine("        ${capitalized(entity.name)}Predicate.${capitalized(attribute.name)}.IsNotNull -> criteriaBuilder.isNotNull(root[${capitalized(entity.name)}Entity_.${decapitalized(attribute.name)}])")
+                        writer.appendLine("        ${capitalized(entity.name)}Predicate.${capitalized(attribute.name)}.IsNull -> criteriaBuilder.isNull(root[${capitalized(entity.name)}Entity_.${decapitalized(attribute.name)}])")
+                        writer.appendLine("        is ${capitalized(entity.name)}Predicate.${capitalized(attribute.name)}.LessThan -> criteriaBuilder.lessThan(root[${capitalized(entity.name)}Entity_.${decapitalized(attribute.name)}], this.x)")
+                        writer.appendLine("        is ${capitalized(entity.name)}Predicate.${capitalized(attribute.name)}.LessThanOrEqualTo -> criteriaBuilder.lessThanOrEqualTo(root[${capitalized(entity.name)}Entity_.${decapitalized(attribute.name)}], this.x)")
+                        if (attribute.columnType.get() is CodegenType.Basic.String) {
+                            writer.appendLine("        is ${capitalized(entity.name)}Predicate.${capitalized(attribute.name)}.Like -> criteriaBuilder.like(root[${capitalized(entity.name)}Entity_.${decapitalized(attribute.name)}], this.x)")
+                        }
+                        writer.appendLine("        is ${capitalized(entity.name)}Predicate.${capitalized(attribute.name)}.NotBetween -> criteriaBuilder.not(criteriaBuilder.between(root[${capitalized(entity.name)}Entity_.${decapitalized(attribute.name)}], this.x, this.y))")
+                        writer.appendLine("        is ${capitalized(entity.name)}Predicate.${capitalized(attribute.name)}.NotEqual -> criteriaBuilder.notEqual(root[${capitalized(entity.name)}Entity_.${decapitalized(attribute.name)}], this.x)")
+                        writer.appendLine("        is ${capitalized(entity.name)}Predicate.${capitalized(attribute.name)}.NotGreaterThan -> criteriaBuilder.not(criteriaBuilder.greaterThan(root[${capitalized(entity.name)}Entity_.${decapitalized(attribute.name)}], this.x))")
+                        writer.appendLine("        is ${capitalized(entity.name)}Predicate.${capitalized(attribute.name)}.NotGreaterThanOrEqualTo -> criteriaBuilder.not(criteriaBuilder.greaterThanOrEqualTo(root[${capitalized(entity.name)}Entity_.${decapitalized(attribute.name)}], this.x))")
+                        writer.appendLine("        is ${capitalized(entity.name)}Predicate.${capitalized(attribute.name)}.NotLessThan -> criteriaBuilder.not(criteriaBuilder.lessThan(root[${capitalized(entity.name)}Entity_.${decapitalized(attribute.name)}], this.x))")
+                        writer.appendLine("        is ${capitalized(entity.name)}Predicate.${capitalized(attribute.name)}.NotLessThanOrEqualTo -> criteriaBuilder.not(criteriaBuilder.lessThanOrEqualTo(root[${capitalized(entity.name)}Entity_.${decapitalized(attribute.name)}], this.x))")
+                        if (attribute.columnType.get() is CodegenType.Basic.String) {
+                            writer.appendLine("        is ${capitalized(entity.name)}Predicate.${capitalized(attribute.name)}.NotLike -> criteriaBuilder.notLike(root[${capitalized(entity.name)}Entity_.${decapitalized(attribute.name)}], this.x)")
+                        }
+                    }
                 }
-                writer.appendLine("        is ${capitalized(entity.name)}Predicate.${capitalized(attribute.name)}.Between -> criteriaBuilder.between(root[${capitalized(entity.name)}Entity_.${decapitalized(attribute.name)}]${relId}, this.x, this.y)")
-                writer.appendLine("        is ${capitalized(entity.name)}Predicate.${capitalized(attribute.name)}.Equal -> criteriaBuilder.equal(root[${capitalized(entity.name)}Entity_.${decapitalized(attribute.name)}]${relId}, this.x)")
-                writer.appendLine("        is ${capitalized(entity.name)}Predicate.${capitalized(attribute.name)}.GreaterThan -> criteriaBuilder.greaterThan(root[${capitalized(entity.name)}Entity_.${decapitalized(attribute.name)}]${relId}, this.x)")
-                writer.appendLine("        is ${capitalized(entity.name)}Predicate.${capitalized(attribute.name)}.GreaterThanOrEqualTo -> criteriaBuilder.greaterThanOrEqualTo(root[${capitalized(entity.name)}Entity_.${decapitalized(attribute.name)}]${relId}, this.x)")
-                writer.appendLine("        ${capitalized(entity.name)}Predicate.${capitalized(attribute.name)}.IsNotNull -> criteriaBuilder.isNotNull(root[${capitalized(entity.name)}Entity_.${decapitalized(attribute.name)}]${relId})")
-                writer.appendLine("        ${capitalized(entity.name)}Predicate.${capitalized(attribute.name)}.IsNull -> criteriaBuilder.isNull(root[${capitalized(entity.name)}Entity_.${decapitalized(attribute.name)}]${relId})")
-                writer.appendLine("        is ${capitalized(entity.name)}Predicate.${capitalized(attribute.name)}.LessThan -> criteriaBuilder.lessThan(root[${capitalized(entity.name)}Entity_.${decapitalized(attribute.name)}]${relId}, this.x)")
-                writer.appendLine("        is ${capitalized(entity.name)}Predicate.${capitalized(attribute.name)}.LessThanOrEqualTo -> criteriaBuilder.lessThanOrEqualTo(root[${capitalized(entity.name)}Entity_.${decapitalized(attribute.name)}]${relId}, this.x)")
-                if (attribute.columnType.get() is CodegenType.Basic.String) {
-                    writer.appendLine("        is ${capitalized(entity.name)}Predicate.${capitalized(attribute.name)}.Like -> criteriaBuilder.like(root[${capitalized(entity.name)}Entity_.${decapitalized(attribute.name)}]${relId}, this.x)")
-                }
-                writer.appendLine("        is ${capitalized(entity.name)}Predicate.${capitalized(attribute.name)}.NotBetween -> criteriaBuilder.not(criteriaBuilder.between(root[${capitalized(entity.name)}Entity_.${decapitalized(attribute.name)}]${relId}, this.x, this.y))")
-                writer.appendLine("        is ${capitalized(entity.name)}Predicate.${capitalized(attribute.name)}.NotEqual -> criteriaBuilder.notEqual(root[${capitalized(entity.name)}Entity_.${decapitalized(attribute.name)}]${relId}, this.x)")
-                writer.appendLine("        is ${capitalized(entity.name)}Predicate.${capitalized(attribute.name)}.NotGreaterThan -> criteriaBuilder.not(criteriaBuilder.greaterThan(root[${capitalized(entity.name)}Entity_.${decapitalized(attribute.name)}]${relId}, this.x))")
-                writer.appendLine("        is ${capitalized(entity.name)}Predicate.${capitalized(attribute.name)}.NotGreaterThanOrEqualTo -> criteriaBuilder.not(criteriaBuilder.greaterThanOrEqualTo(root[${capitalized(entity.name)}Entity_.${decapitalized(attribute.name)}]${relId}, this.x))")
-                writer.appendLine("        is ${capitalized(entity.name)}Predicate.${capitalized(attribute.name)}.NotLessThan -> criteriaBuilder.not(criteriaBuilder.lessThan(root[${capitalized(entity.name)}Entity_.${decapitalized(attribute.name)}]${relId}, this.x))")
-                writer.appendLine("        is ${capitalized(entity.name)}Predicate.${capitalized(attribute.name)}.NotLessThanOrEqualTo -> criteriaBuilder.not(criteriaBuilder.lessThanOrEqualTo(root[${capitalized(entity.name)}Entity_.${decapitalized(attribute.name)}]${relId}, this.x))")
-                if (attribute.columnType.get() is CodegenType.Basic.String) {
-                    writer.appendLine("        is ${capitalized(entity.name)}Predicate.${capitalized(attribute.name)}.NotLike -> criteriaBuilder.notLike(root[${capitalized(entity.name)}Entity_.${decapitalized(attribute.name)}]${relId}, this.x)")
-                }
+
+//                val relId = when (val type = attribute.columnType.orNull ?: throw GradleException("'columnType' of attribute '${attribute.name}' in entity '${entity.name}' is not declared")) {
+//                    is CodegenType.OwningSide.ManyToOne -> {
+//                        val targetEntity = try {
+//                            entities.getByName(type.target)
+//                        } catch (e: UnknownDomainObjectException) {
+//                            throw GradleException("'target' of attribute '${attribute.name}' in entity '${entity.name}' is a unknown entity")
+//                        }
+//                        val targetId = targetEntity.attributes.firstOrNull { it.columnType.orNull is CodegenType.Id } ?: throw GradleException("'target' of attribute '${attribute.name}' in entity '${entity.name}' does not declare an identifier")
+//                        "[${capitalized(targetEntity.name)}Entity_.${decapitalized(targetId.name)}]"
+//                    }
+//
+//                    else -> ""
+//                }
+//                writer.appendLine("        is ${capitalized(entity.name)}Predicate.${capitalized(attribute.name)}.Between -> criteriaBuilder.between(root[${capitalized(entity.name)}Entity_.${decapitalized(attribute.name)}]${relId}, this.x, this.y)")
+//                writer.appendLine("        is ${capitalized(entity.name)}Predicate.${capitalized(attribute.name)}.Equal -> criteriaBuilder.equal(root[${capitalized(entity.name)}Entity_.${decapitalized(attribute.name)}]${relId}, this.x)")
+//                writer.appendLine("        is ${capitalized(entity.name)}Predicate.${capitalized(attribute.name)}.GreaterThan -> criteriaBuilder.greaterThan(root[${capitalized(entity.name)}Entity_.${decapitalized(attribute.name)}]${relId}, this.x)")
+//                writer.appendLine("        is ${capitalized(entity.name)}Predicate.${capitalized(attribute.name)}.GreaterThanOrEqualTo -> criteriaBuilder.greaterThanOrEqualTo(root[${capitalized(entity.name)}Entity_.${decapitalized(attribute.name)}]${relId}, this.x)")
+//                writer.appendLine("        ${capitalized(entity.name)}Predicate.${capitalized(attribute.name)}.IsNotNull -> criteriaBuilder.isNotNull(root[${capitalized(entity.name)}Entity_.${decapitalized(attribute.name)}]${relId})")
+//                writer.appendLine("        ${capitalized(entity.name)}Predicate.${capitalized(attribute.name)}.IsNull -> criteriaBuilder.isNull(root[${capitalized(entity.name)}Entity_.${decapitalized(attribute.name)}]${relId})")
+//                writer.appendLine("        is ${capitalized(entity.name)}Predicate.${capitalized(attribute.name)}.LessThan -> criteriaBuilder.lessThan(root[${capitalized(entity.name)}Entity_.${decapitalized(attribute.name)}]${relId}, this.x)")
+//                writer.appendLine("        is ${capitalized(entity.name)}Predicate.${capitalized(attribute.name)}.LessThanOrEqualTo -> criteriaBuilder.lessThanOrEqualTo(root[${capitalized(entity.name)}Entity_.${decapitalized(attribute.name)}]${relId}, this.x)")
+//                if (attribute.columnType.get() is CodegenType.Basic.String) {
+//                    writer.appendLine("        is ${capitalized(entity.name)}Predicate.${capitalized(attribute.name)}.Like -> criteriaBuilder.like(root[${capitalized(entity.name)}Entity_.${decapitalized(attribute.name)}]${relId}, this.x)")
+//                }
+//                writer.appendLine("        is ${capitalized(entity.name)}Predicate.${capitalized(attribute.name)}.NotBetween -> criteriaBuilder.not(criteriaBuilder.between(root[${capitalized(entity.name)}Entity_.${decapitalized(attribute.name)}]${relId}, this.x, this.y))")
+//                writer.appendLine("        is ${capitalized(entity.name)}Predicate.${capitalized(attribute.name)}.NotEqual -> criteriaBuilder.notEqual(root[${capitalized(entity.name)}Entity_.${decapitalized(attribute.name)}]${relId}, this.x)")
+//                writer.appendLine("        is ${capitalized(entity.name)}Predicate.${capitalized(attribute.name)}.NotGreaterThan -> criteriaBuilder.not(criteriaBuilder.greaterThan(root[${capitalized(entity.name)}Entity_.${decapitalized(attribute.name)}]${relId}, this.x))")
+//                writer.appendLine("        is ${capitalized(entity.name)}Predicate.${capitalized(attribute.name)}.NotGreaterThanOrEqualTo -> criteriaBuilder.not(criteriaBuilder.greaterThanOrEqualTo(root[${capitalized(entity.name)}Entity_.${decapitalized(attribute.name)}]${relId}, this.x))")
+//                writer.appendLine("        is ${capitalized(entity.name)}Predicate.${capitalized(attribute.name)}.NotLessThan -> criteriaBuilder.not(criteriaBuilder.lessThan(root[${capitalized(entity.name)}Entity_.${decapitalized(attribute.name)}]${relId}, this.x))")
+//                writer.appendLine("        is ${capitalized(entity.name)}Predicate.${capitalized(attribute.name)}.NotLessThanOrEqualTo -> criteriaBuilder.not(criteriaBuilder.lessThanOrEqualTo(root[${capitalized(entity.name)}Entity_.${decapitalized(attribute.name)}]${relId}, this.x))")
+//                if (attribute.columnType.get() is CodegenType.Basic.String) {
+//                    writer.appendLine("        is ${capitalized(entity.name)}Predicate.${capitalized(attribute.name)}.NotLike -> criteriaBuilder.notLike(root[${capitalized(entity.name)}Entity_.${decapitalized(attribute.name)}]${relId}, this.x)")
+//                }
             }
             writer.appendLine("    }")
             writer.appendLine("}")
