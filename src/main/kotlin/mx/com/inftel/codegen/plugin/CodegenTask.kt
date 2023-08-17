@@ -57,7 +57,7 @@ abstract class CodegenTask : DefaultTask() {
     @TaskAction
     fun generate() {
         for (entity in entities) {
-            generateFullInterface(entity)
+            generateInterface(entity)
             generateData(entity)
             if (generateOnlyData.getOrElse(false)) return
             generateMetamodel(entity)
@@ -417,14 +417,17 @@ abstract class CodegenTask : DefaultTask() {
         }
     }
 
-    private fun generateFullInterface(entity: CodegenEntity) {
+    private fun generateInterface(entity: CodegenEntity) {
         val packageName = entity.packageName.getOrElse("")
         val packageDir = packageName.replace('.', '/')
         val outputFilename = "I${capitalized(entity.name)}.kt"
         val generateConstrainedData = generateConstrainedData.getOrElse(true)
         //
+        val entityAlias = entity.entityName.getOrElse(entity.name)
+        //
         val importStatements = buildSet {
             if (generateConstrainedData) {
+                add("import jakarta.json.bind.annotation.*")
                 add("import jakarta.validation.constraints.*")
             }
             addKotlinImportsEntity(entity)
@@ -444,6 +447,7 @@ abstract class CodegenTask : DefaultTask() {
                 }
                 writer.appendLine()
             }
+            writer.appendLine("@JsonbTypeInfo(key = \"@type\", value = [JsonbSubtype(alias = \"$entityAlias\", type = ${capitalized(entity.name)}Data::class)])")
             writer.appendLine("interface I${capitalized(entity.name)} {")
             writer.appendLine()
             for (attribute in entity.attributes) {
