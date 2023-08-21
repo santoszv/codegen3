@@ -35,6 +35,7 @@ class CodegenPlugin : Plugin<Project> {
             it.group = "codegen"
             it.generateComposableData.set(extension.generateComposableData)
             it.generateConstrainedData.set(extension.generateConstrainedData)
+            it.generateJsonAwareData.set(extension.generateJsonAwareData)
             it.generateOnlyData.set(extension.generateOnlyData)
             it.entities.addAllLater(target.provider { extension.entities })
             it.outputDirectory.set(outputDirectory)

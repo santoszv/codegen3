@@ -42,6 +42,9 @@ abstract class CodegenTask : DefaultTask() {
     abstract val generateConstrainedData: Property<Boolean>
 
     @get:Internal
+    abstract val generateJsonAwareData: Property<Boolean>
+
+    @get:Internal
     abstract val generateOnlyData: Property<Boolean>
 
     @get:Internal
@@ -422,12 +425,15 @@ abstract class CodegenTask : DefaultTask() {
         val packageDir = packageName.replace('.', '/')
         val outputFilename = "I${capitalized(entity.name)}.kt"
         val generateConstrainedData = generateConstrainedData.getOrElse(true)
+        val generateJsonAwareData = generateJsonAwareData.getOrElse(true)
         //
         val entityAlias = entity.entityName.getOrElse(entity.name)
         //
         val importStatements = buildSet {
-            if (generateConstrainedData) {
+            if (generateJsonAwareData) {
                 add("import jakarta.json.bind.annotation.*")
+            }
+            if (generateConstrainedData) {
                 add("import jakarta.validation.constraints.*")
             }
             addKotlinImportsEntity(entity)
@@ -447,7 +453,9 @@ abstract class CodegenTask : DefaultTask() {
                 }
                 writer.appendLine()
             }
-            writer.appendLine("@JsonbTypeInfo(key = \"@type\", value = [JsonbSubtype(alias = \"$entityAlias\", type = ${capitalized(entity.name)}Data::class)])")
+            if (generateJsonAwareData) {
+                writer.appendLine("@JsonbTypeInfo(key = \"@type\", value = [JsonbSubtype(alias = \"$entityAlias\", type = ${capitalized(entity.name)}Data::class)])")
+            }
             writer.appendLine("interface I${capitalized(entity.name)} {")
             writer.appendLine()
             for (attribute in entity.attributes) {

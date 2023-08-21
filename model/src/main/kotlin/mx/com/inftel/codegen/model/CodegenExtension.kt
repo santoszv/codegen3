@@ -25,7 +25,10 @@ interface CodegenExtension {
 
     val generateConstrainedData: Property<Boolean>
 
+    val generateJsonAwareData: Property<Boolean>
+
     val generateOnlyData: Property<Boolean>
 
     val entities: NamedDomainObjectContainer<CodegenEntity>
+
 }
